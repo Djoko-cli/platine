@@ -1,5 +1,5 @@
 #!/bin/bash
-# Construit Platine, l'installe sur le premier iPhone physique joignable et la lance.
+# Construit Platine et l'installe sur le premier iPhone physique joignable.
 # Usage : scripts/construire.sh [--sans-installer]
 # Garde-fous : pas d'app sans icône ; l'identité de signature n'est jamais affichée (titulaire et équipe masqués).
 set -euo pipefail
@@ -45,6 +45,6 @@ set -e
 app="build/Build/Products/Debug-iphoneos/Platine.app"
 echo "== installation sur l'iPhone"
 xcrun devicectl device install app --device "$appareil" "$app" 2>&1 | grep -E 'App installed|error|Error' | masquer
-echo "== lancement"
-xcrun devicectl device process launch --device "$appareil" io.github.djoko-cli.platine 2>&1 | grep -E 'Launched|error|Error' | masquer
-echo "FIN"
+# Pas de lancement depuis le Mac : une app lancée en mode développement échappe à la demande d'accès au réseau
+# local, dont l'extension dépend. On l'ouvre depuis son icône sur l'iPhone.
+echo "FIN : ouvrir Platine depuis son icône sur l'iPhone"

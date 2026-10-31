@@ -5,7 +5,7 @@ DerivedData/
 xcuserdata/
 .DS_Store
 
-# Projet et Info.plist générés par xcodegen
+# Projet, Info.plist et droits générés par xcodegen
 Platine.xcodeproj/
 Platine/Info.plist
 PlatineSession/Info.plist
@@ -19,3 +19,5 @@ garde.local.txt
 .superpowers/
 .archify/
 build-essai.log
+Platine/Platine.entitlements
+PlatineSession/PlatineSession.entitlements

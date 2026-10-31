@@ -1,5 +1,6 @@
 // Platine, essai témoin des sessions distantes d'iOS 27 : l'app lit ce que joue OwnTone, démarre une session distante
 // avec cet état et la tient à jour tant qu'elle est ouverte (pas encore de push). Le journal à l'écran sert au banc.
+import Network
 import NowPlaying
 import SwiftUI
 
@@ -21,9 +22,12 @@ final class Relais {
         didSet { UserDefaults.standard.set(adresse, forKey: "adresse") }
     }
     private(set) var journal: [String] = []
+    private(set) var journalExtension: [String] = []
     private(set) var session: RemoteMediaSession<PlatineAttributs>?
     private(set) var dernier: PlatineAttributs?
     private var suivi: Task<Void, Never>?
+    private var lectureJournal: Task<Void, Never>?
+    private var navigateur: NWBrowser?
 
     init() {
         let parDefaut = Bundle.main.object(forInfoDictionaryKey: "OwnToneURL") as? String ?? ""
@@ -36,6 +40,15 @@ final class Relais {
 
     /// Au lancement : reprend une session restée ouverte, et dit si le jeton de démarrage par push existe.
     func reprendre() async {
+        lectureJournal?.cancel()
+        lectureJournal = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.journalExtension = JournalPartage.lire()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+        noter(JournalPartage.fichier == nil ? "conteneur partagé introuvable" : "conteneur partagé disponible")
+        demanderReseauLocal()
         do {
             let ouvertes = try await RemoteMediaSession<PlatineAttributs>.sessions()
             noter("sessions ouvertes : \(ouvertes.count)")
@@ -47,6 +60,29 @@ final class Relais {
             noter("lecture des sessions impossible : \(error)")
         }
         noter("jeton de démarrage par push : \(RemoteMediaSession<PlatineAttributs>.pushToStartToken == nil ? "absent" : "présent")")
+    }
+
+    /// Cherche OwnTone par Bonjour : c'est ce qui fait poser à iOS la question de l'accès au réseau local. L'extension
+    /// dépend de cette autorisation de l'app pour joindre OwnTone (pochette, commandes, volume).
+    private func demanderReseauLocal() {
+        navigateur?.cancel()
+        let navigateur = NWBrowser(for: .bonjour(type: "_daap._tcp", domain: nil), using: .tcp)
+        navigateur.stateUpdateHandler = { [weak self] etat in
+            let texte: String? = switch etat {
+            case .ready: "réseau local : recherche Bonjour active"
+            case .waiting(let erreur): "réseau local : en attente (\(erreur))"
+            case .failed(let erreur): "réseau local : échec (\(erreur))"
+            default: nil
+            }
+            guard let texte else { return }
+            Task { @MainActor in self?.noter(texte) }
+        }
+        navigateur.browseResultsChangedHandler = { [weak self] resultats, _ in
+            let nombre = resultats.count
+            Task { @MainActor in self?.noter("réseau local : \(nombre) service(s) OwnTone trouvé(s)") }
+        }
+        navigateur.start(queue: .main)
+        self.navigateur = navigateur
     }
 
     func demarrer() async {
@@ -133,9 +169,20 @@ struct Ecran: View {
                     Button("Arrêter", role: .destructive) { Task { await relais.arreter() } }
                         .disabled(relais.session == nil)
                 }
-                Section("Journal") {
+                Section("Journal de l'app") {
                     ForEach(Array(relais.journal.enumerated()), id: \.offset) { _, ligne in
                         Text(ligne).font(.caption.monospaced())
+                    }
+                }
+                Section {
+                    ForEach(Array(relais.journalExtension.enumerated()), id: \.offset) { _, ligne in
+                        Text(ligne).font(.caption.monospaced())
+                    }
+                } header: {
+                    HStack {
+                        Text("Journal de l'extension")
+                        Spacer()
+                        Button("Vider") { JournalPartage.vider() }.font(.caption)
                     }
                 }
             }

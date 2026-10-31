@@ -19,6 +19,7 @@ struct PlatineAttributs: RemoteMediaSessionAttributes, Equatable {
     var titre: String
     var artiste: String
     var album: String
+    var pochette: String  // l'adresse complète de la pochette donnée par OwnTone, vide s'il n'y en a pas
     var dureeMs: Int
     var positionMs: Int
     var horodatage: Date  // moment où positionMs a été relevée
@@ -62,6 +63,7 @@ struct ClientOwnTone: Sendable {
             var artist: String?
             var album: String?
             var length_ms: Int?
+            var artwork_url: String?  // relative à OwnTone (« ./artwork/item/<morceau>?v=… ») ou absolue
         }
         var items: [Element]
     }
@@ -86,6 +88,7 @@ struct ClientOwnTone: Sendable {
             titre: piste?.title ?? "",
             artiste: piste?.artist ?? "",
             album: piste?.album ?? "",
+            pochette: piste?.artwork_url.flatMap { URL(string: $0, relativeTo: serveur.appending(path: ""))?.absoluteString } ?? "",
             dureeMs: piste?.length_ms ?? l.item_length_ms,
             positionMs: l.item_progress_ms,
             horodatage: .now,
@@ -118,9 +121,11 @@ struct ClientOwnTone: Sendable {
         try await envoyer("api/outputs/\(sortie)", corps: ["volume": min(max(niveau, 0), 100)])
     }
 
-    func pochette(pisteID: Int) async throws -> Data {
-        let url = serveur.appending(path: "artwork/item/\(pisteID)")
-            .appending(queryItems: [URLQueryItem(name: "maxwidth", value: "600"), URLQueryItem(name: "maxheight", value: "600")])
+    func pochette(adresse: String) async throws -> Data {
+        guard var url = URL(string: adresse) else { throw URLError(.badURL) }
+        if url.host == serveur.host {
+            url.append(queryItems: [URLQueryItem(name: "maxwidth", value: "600"), URLQueryItem(name: "maxheight", value: "600")])
+        }
         let (data, reponse) = try await URLSession.shared.data(from: url)
         guard (reponse as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.fileDoesNotExist) }
         return data

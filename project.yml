@@ -37,10 +37,17 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSLocalNetworkUsageDescription: "Platine lit ce que joue OwnTone sur le réseau de la maison et lui transmet tes commandes."
+        NSBonjourServices:
+          - _daap._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         # Adresse d'OwnTone par défaut, réglée dans Config/Local.xcconfig (non versionné).
         OwnToneURL: $(OWNTONE_URL)
+    entitlements:
+      path: Platine/Platine.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.djoko-cli.platine
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.djoko-cli.platine
@@ -60,6 +67,15 @@ targets:
         NSLocalNetworkUsageDescription: "Platine transmet tes commandes à OwnTone sur le réseau de la maison."
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          # L'adresse Tailscale d'OwnTone (essai témoin) est une IP en clair : exception le temps de l'essai.
+          NSAllowsArbitraryLoads: true
+        # Adresse d'OwnTone par Tailscale pour la sonde réseau, réglée dans Config/Local.xcconfig (non versionné).
+        PlatineSondeTailscale: $(OWNTONE_URL_TAILSCALE)
+    entitlements:
+      path: PlatineSession/PlatineSession.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.djoko-cli.platine
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.djoko-cli.platine.session

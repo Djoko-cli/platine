@@ -46,17 +46,19 @@ go vet ./... && go test -count=1 ./...
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o build/relais .
 
 echo "== copie vers le NAS"
-envoyer() { ssh "$nas" "umask ${3:-022}; cat > '$2'" < "$1"; }
+# Les ACL du dossier partagé de DSM passent outre umask (fichiers créés en rwxrwxrwx+) ; chmod les retire. Un secret
+# reçoit ses droits avant son contenu : il n'est jamais lisible par d'autres, même un instant.
+envoyer() { ssh "$nas" "cat > '$2' && chmod ${3:-644} '$2'" < "$1"; }
+envoyer_secret() { ssh "$nas" "rm -f '$2' && : > '$2' && chmod 600 '$2' && cat > '$2'"; }
 ssh "$nas" "mkdir -p '$dossier/donnees' && chmod 700 '$dossier/donnees'"
-envoyer build/relais "$dossier/relais"
-ssh "$nas" "chmod 755 '$dossier/relais'"
+envoyer build/relais "$dossier/relais" 755
 envoyer Dockerfile "$dossier/Dockerfile"
 envoyer compose.yaml "$dossier/compose.yaml"
-printf '*\n!relais\n' | ssh "$nas" "cat > '$dossier/.dockerignore'"
+printf '*\n!relais\n' | ssh "$nas" "cat > '$dossier/.dockerignore' && chmod 644 '$dossier/.dockerignore'"
 if ssh "$nas" "test -f '$dossier/AuthKey.p8'"; then
   echo "clé APNs : déjà en place"
 else
-  envoyer "${cles[0]}" "$dossier/AuthKey.p8" 077 && echo "clé APNs : copiée (600)"
+  envoyer_secret "$dossier/AuthKey.p8" < "${cles[0]}" && echo "clé APNs : copiée (600)"
 fi
 if ssh "$nas" "test -f '$dossier/.env'"; then
   echo ".env : déjà en place"
@@ -69,7 +71,7 @@ else
     echo "RELAIS_UID=$(ssh "$nas" id -u)"
     echo "RELAIS_GID=$(ssh "$nas" id -g)"
     echo "TZ=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')"
-  } | ssh "$nas" "umask 077; cat > '$dossier/.env'"
+  } | envoyer_secret "$dossier/.env"
   echo ".env : écrit (600)"
 fi
 # Écrit en place (même inode) : le conteneur monte ce fichier seul, un fichier remplacé lui resterait invisible.
@@ -77,7 +79,7 @@ if ssh "$nas" "cat '$portier/Caddyfile'" | cmp -s - "$racine/portier/Caddyfile";
   echo "Caddyfile du portier : déjà à jour"
 else
   ssh "$nas" "cp -p '$portier/Caddyfile' '$portier/Caddyfile.precedent'"
-  envoyer "$racine/portier/Caddyfile" "$portier/Caddyfile"
+  ssh "$nas" "cat > '$portier/Caddyfile'" < "$racine/portier/Caddyfile"  # droits d'origine gardés
   echo "Caddyfile du portier : à jour (l'ancien en Caddyfile.precedent)"
 fi
 

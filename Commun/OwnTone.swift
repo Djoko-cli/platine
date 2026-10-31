@@ -22,7 +22,8 @@ struct PlatineAttributs: RemoteMediaSessionAttributes, Equatable {
     var pochette: String  // l'adresse complète de la pochette donnée par OwnTone, vide s'il n'y en a pas
     var dureeMs: Int
     var positionMs: Int
-    var horodatage: Date  // moment où positionMs a été relevée
+    var horodatage: TimeInterval  // moment où positionMs a été relevée, en secondes depuis 1970 (pas de Date : le format
+                                  // de date du décodeur d'iOS pour les push n'est pas documenté)
     var appareils: [Appareil]  // les sorties d'OwnTone actives
 
     /// Ce qui mérite une mise à jour de la session : tout sauf l'avancement, que le système extrapole.
@@ -123,7 +124,7 @@ struct ClientOwnTone: Sendable {
             pochette: piste?.artwork_url.flatMap { URL(string: $0, relativeTo: serveur.appending(path: ""))?.absoluteString } ?? "",
             dureeMs: piste?.length_ms ?? l.item_length_ms,
             positionMs: l.item_progress_ms,
-            horodatage: .now,
+            horodatage: Date.now.timeIntervalSince1970,
             appareils: s.outputs.filter(\.selected).map { .init(id: $0.id, nom: $0.name, volume: $0.volume) }
         )
     }

@@ -8,9 +8,20 @@ enum JournalPartage {
     private static let journal = Logger(subsystem: "io.github.djoko-cli.platine", category: "session")
     private static let verrou = OSAllocatedUnfairLock()
 
+    /// Dans Library/Caches : devicectl peut l'y lire depuis le Mac (il ne lit le conteneur partagé que sous Library).
     static var fichier: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupe)?
-            .appending(path: "journal-extension.txt")
+            .appending(path: "Library/Caches/journal-extension.txt")
+    }
+
+    /// Reprend le journal rangé à la racine du conteneur par les versions d'avant (devicectl ne le lit pas là).
+    static func reprendreAncien() {
+        guard let fichier, let racine = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupe)
+        else { return }
+        let ancien = racine.appending(path: "journal-extension.txt")
+        guard FileManager.default.fileExists(atPath: ancien.path()),
+              !FileManager.default.fileExists(atPath: fichier.path()) else { return }
+        try? FileManager.default.moveItem(at: ancien, to: fichier)
     }
 
     /// Ajoute une ligne horodatée et garde les 200 dernières.

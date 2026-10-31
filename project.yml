@@ -46,6 +46,8 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.io.github.djoko-cli.platine
+        # Les push nowplaying (démarrage et mise à jour de la carte) ; développement tant que l'app passe par Xcode.
+        aps-environment: development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.djoko-cli.platine

@@ -86,6 +86,25 @@ D'où une **étape 0, essai témoin** : avec la clé APNs, envoyer à la main de
 un `end` au jeton de démarrage que l'app aura obtenu (lu dans son conteneur partagé par `devicectl`), et observer
 l'iPhone. Le relais ne se construit que si l'essai est concluant.
 
+## Résultats de l'essai témoin (31/10/2026)
+
+Push envoyées à la main depuis le Mac (`scripts/essai-push.py`), journal système de l'iPhone lu par `idevicesyslog`.
+
+- **Démarrage par push : marche.** App fermée, une push `start` au jeton de démarrage réveille l'extension (via
+  `mediaremoted`), qui construit la carte ; elle apparaît dans le Centre de contrôle sans ouvrir l'app.
+- **Mise à jour par push : marche.** Une push `update` au jeton de la session fait suivre la carte (morceau, pochette).
+- **Format des attributs :** une date en texte ISO 8601 (comme dans l'exemple d'Apple) fait rejeter la push sans
+  réveiller l'extension ; un nombre de secondes depuis 1970 passe. `horodatage` est donc un `TimeInterval`.
+- **Jeton de session :** l'extension le reçoit aussi pour une session démarrée par l'app.
+- **Écran verrouillé : non obtenu.** `requestToBecomeSystemPrimary` (app au premier plan) est accepté par
+  `mediaremoted` (« set active session »), mais le point de lecture proactif de l'écran verrouillé reste celui qu'iOS
+  a retenu (« ProactiveSystemEndpoint remains … selectionReason = UserSelected ») ; toucher la carte ou faire
+  lecture et pause n'y change rien. Une fois, sans aucune enceinte active, la demande a échoué (`internalFailure`).
+- **Hypothèse non tranchée :** la tuile native des HomePod (MediaRemote d'OwnTone) serait ce point retenu. À vérifier
+  en coupant MediaRemote dans OwnTone, avec des enceintes actives.
+- **Confirmé dans le journal :** `mediaremoted` applique une « Network restriction » à l'extension (d'où le refus du
+  réseau local) ; il range la session distante sous un HomePod.
+
 ## Les décisions à prendre
 
 | # | Question | Proposition |

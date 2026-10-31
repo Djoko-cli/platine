@@ -29,6 +29,22 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
     init(attributs: PlatineAttributs) {
         id = attributs.id
         self.attributs = attributs
+        suivreJetonPush()
+    }
+
+    /// Le jeton de mise à jour de cette session, rangé pour le relais (pendant l'essai : lu par le Mac).
+    private func suivreJetonPush() {
+        if let jeton = pushToken {
+            JetonsPush.enregistrerSession(id, jeton: jeton)
+            JournalPartage.noter("jeton de session : présent (…\(JetonsPush.hexadecimal(jeton).suffix(4)))")
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            for await jeton in self.pushTokenUpdates {
+                JetonsPush.enregistrerSession(self.id, jeton: jeton)
+                JournalPartage.noter("nouveau jeton de session (…\(JetonsPush.hexadecimal(jeton).suffix(4)))")
+            }
+        }
     }
 
     func update(_ attributs: PlatineAttributs) {
@@ -93,7 +109,7 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
         return MediaPlaybackSnapshot(
             state: etat,
             elapsedTime: Double(attributs.positionMs) / 1000,
-            timestamp: attributs.horodatage
+            timestamp: Date(timeIntervalSince1970: attributs.horodatage)
         )
     }
 

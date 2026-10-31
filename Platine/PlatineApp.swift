@@ -23,6 +23,7 @@ final class Relais {
     private(set) var dernier: PlatineAttributs?
     private var suivi: Task<Void, Never>?
     private var lectureJournal: Task<Void, Never>?
+    private var suiviJeton: Task<Void, Never>?
 
     func noter(_ texte: String) {
         journal.insert("\(Date.now.formatted(date: .omitted, time: .standard))  \(texte)", at: 0)
@@ -30,6 +31,7 @@ final class Relais {
 
     /// Au lancement : reprend une session restée ouverte, et dit si le jeton de démarrage par push existe.
     func reprendre() async {
+        JournalPartage.reprendreAncien()
         lectureJournal?.cancel()
         lectureJournal = Task { [weak self] in
             while !Task.isCancelled {
@@ -48,7 +50,19 @@ final class Relais {
         } catch {
             noter("lecture des sessions impossible : \(error)")
         }
-        noter("jeton de démarrage par push : \(RemoteMediaSession<PlatineAttributs>.pushToStartToken == nil ? "absent" : "présent")")
+        if let jeton = RemoteMediaSession<PlatineAttributs>.pushToStartToken {
+            JetonsPush.enregistrerDemarrage(jeton)
+            noter("jeton de démarrage par push : présent (…\(JetonsPush.hexadecimal(jeton).suffix(4)))")
+        } else {
+            noter("jeton de démarrage par push : absent pour l'instant")
+        }
+        suiviJeton?.cancel()
+        suiviJeton = Task { [weak self] in
+            for await jeton in RemoteMediaSession<PlatineAttributs>.pushToStartTokenUpdates {
+                JetonsPush.enregistrerDemarrage(jeton)
+                self?.noter("nouveau jeton de démarrage par push (…\(JetonsPush.hexadecimal(jeton).suffix(4)))")
+            }
+        }
     }
 
     func demarrer() async {

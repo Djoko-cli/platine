@@ -4,5 +4,6 @@
 //   DEVELOPMENT_TEAM = <identifiant de l'équipe>
 //   PLATINE_PORTIER = https:/$()/<nom public du portier>   (voir portier/)
 //   PLATINE_JETON = <jeton du portier, celui du .env sur le NAS>
+//   PLATINE_PAIRES = <id sortie>+<id sortie>[=<nom affiché>], séparées par des virgules   (facultatif)
 CODE_SIGN_STYLE = Automatic
 #include? "Local.xcconfig"

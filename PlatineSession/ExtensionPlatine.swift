@@ -106,8 +106,47 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
         ]
     }
 
+    /// Une paire stéréo : OwnTone voit deux sorties, la carte n'en montre qu'une, dont le curseur règle les deux.
+    private struct Paire {
+        var membres: [String]
+        var nom: String?
+    }
+
+    /// Les paires de Config/Local.xcconfig : PLATINE_PAIRES = <id>+<id>[=<nom>], séparées par des virgules.
+    private static let paires: [Paire] = {
+        guard let texte = Bundle.main.object(forInfoDictionaryKey: "PlatinePaires") as? String else { return [] }
+        return texte.split(separator: ",").compactMap { entree in
+            let morceaux = entree.split(separator: "=", maxSplits: 1)
+            guard let liste = morceaux.first else { return nil }
+            let membres = liste.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard membres.count >= 2 else { return nil }
+            return Paire(membres: membres, nom: morceaux.count > 1 ? morceaux[1].trimmingCharacters(in: .whitespaces) : nil)
+        }
+    }()
+
     var devices: [MediaDevice] {
-        attributs.appareils.map { appareil in
+        var restants = attributs.appareils
+        var resultat: [MediaDevice] = []
+        for paire in Self.paires {
+            let membres = restants.filter { paire.membres.contains($0.id) }
+            guard membres.count >= 2 else { continue }
+            restants.removeAll { paire.membres.contains($0.id) }
+            let ids = membres.map(\.id)
+            let volume = membres.map(\.volume).reduce(0, +) / membres.count
+            resultat.append(MediaDevice(
+                id: "paire-" + ids.joined(separator: "-"),
+                name: paire.nom ?? Self.nomCommun(membres.map(\.nom)),
+                type: Self.typeGroupe,
+                capabilities: [
+                    .absoluteVolume(Float(volume) / 100) { niveau in
+                        for id in ids {
+                            try await self.changerVolume(Int((niveau * 100).rounded()), sortie: id)
+                        }
+                    }
+                ]
+            ))
+        }
+        return resultat + restants.map { appareil in
             MediaDevice(
                 id: appareil.id,
                 name: appareil.nom,
@@ -119,6 +158,22 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
                 ]
             )
         }
+    }
+
+    /// Le type « groupe d'enceintes » n'existe qu'à partir d'iOS 27.2.
+    private static var typeGroupe: MediaDevice.DeviceType {
+        if #available(iOS 27.2, *) { return .speakerGroup }
+        return .speaker
+    }
+
+    /// Le nom commun aux membres d'une paire : « Enceinte D » et « Enceinte G » donnent « Enceinte ».
+    private static func nomCommun(_ noms: [String]) -> String {
+        guard var prefixe = noms.first else { return "Paire stéréo" }
+        for nom in noms.dropFirst() {
+            prefixe = String(prefixe.commonPrefix(with: nom))
+        }
+        let nom = prefixe.trimmingCharacters(in: .whitespaces)
+        return nom.isEmpty ? "Paire stéréo" : nom
     }
 
     /// Envoie la commande, puis relit l'état d'OwnTone : la carte suit sans attendre une mise à jour de l'app.

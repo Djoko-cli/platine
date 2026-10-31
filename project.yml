@@ -68,6 +68,8 @@ targets:
         # Config/Local.xcconfig (non versionné) ; le jeton finit dans le paquet de l'app, installée par Xcode.
         PlatinePortier: $(PLATINE_PORTIER)
         PlatineJeton: $(PLATINE_JETON)
+        # Les paires stéréo, réunies en une seule ligne de la carte (identifiants des sorties d'OwnTone, locaux).
+        PlatinePaires: $(PLATINE_PAIRES)
     entitlements:
       path: PlatineSession/PlatineSession.entitlements
       properties:

@@ -8,15 +8,35 @@ import NowPlaying
 @main
 struct ExtensionPlatine: RemoteMediaSessionExtension {
     var configuration: RemoteMediaSessionExtensionConfiguration<Self> {
-        RemoteMediaSessionExtensionConfiguration(extension: self)
+        _ = Self.binaireAuLancement  // relevé dès le lancement du processus, avant toute réinstallation
+        return RemoteMediaSessionExtensionConfiguration(extension: self)
     }
 
     func session(_ attributs: PlatineAttributs) async throws -> SessionPlatine {
+        Self.quitterSiPerimee()
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         JournalPartage.noter("session demandée (extension \(version)) : \(attributs.etat), piste \(attributs.pisteID), \(attributs.appareils.count) appareil(s), \(ClientOwnTone.adressePortier == nil ? "OwnTone en direct" : "par le portier")")
         let session = SessionPlatine(attributs: attributs)
         JournalPartage.noter("lignes de la carte : \(session.devices.map(\.name).joined(separator: ", "))")
         return session
+    }
+}
+
+extension ExtensionPlatine {
+    /// La date du binaire qui tourne. Lue par FileManager, sans le cache de valeurs d'une URL.
+    fileprivate static let binaireAuLancement = dateDuBinaire()
+
+    private static func dateDuBinaire() -> Date? {
+        Bundle.main.executablePath.flatMap { try? FileManager.default.attributesOfItem(atPath: $0)[.modificationDate] as? Date }
+    }
+
+    /// mediaremoted garde le processus de l'extension en vie et le réutilise, même après une réinstallation de l'app :
+    /// l'ancien code continuerait de répondre. Si le binaire sur le disque a changé ou disparu depuis le lancement,
+    /// l'extension s'arrête ; iOS lance la nouvelle version à l'appel suivant. Sans date au lancement, rien n'est jugé.
+    static func quitterSiPerimee() {
+        guard let auLancement = binaireAuLancement, dateDuBinaire() != auLancement else { return }
+        JournalPartage.noter("extension périmée (nouvelle version installée) : arrêt, la suivante prendra le relais")
+        exit(0)
     }
 }
 
@@ -52,6 +72,7 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
     }
 
     func update(_ attributs: PlatineAttributs) {
+        ExtensionPlatine.quitterSiPerimee()
         self.attributs = attributs
     }
 

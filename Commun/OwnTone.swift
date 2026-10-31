@@ -42,6 +42,18 @@ struct ClientOwnTone: Sendable {
         self.jeton = jeton
     }
 
+    /// L'adresse du portier, lue dans l'Info.plist de l'app comme de l'extension (depuis Config/Local.xcconfig).
+    static let adressePortier = reglage("PlatinePortier")
+
+    /// Le client du portier, avec son jeton ; nil si le portier n'est pas réglé.
+    static var portier: ClientOwnTone? {
+        adressePortier.flatMap { ClientOwnTone(adresse: $0, jeton: reglage("PlatineJeton")) }
+    }
+
+    private static func reglage(_ cle: String) -> String? {
+        (Bundle.main.object(forInfoDictionaryKey: cle) as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     private func demande(_ url: URL) -> URLRequest {
         var demande = URLRequest(url: url)
         if let jeton, url.host == serveur.host {

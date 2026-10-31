@@ -1,9 +1,8 @@
-// Signature de l'app. L'équipe de développement et l'adresse d'OwnTone sont propres à chaque installation :
+// Signature de l'app. L'équipe de développement et le portier d'OwnTone sont propres à chaque installation :
 // elles se règlent dans Local.xcconfig, à côté de ce fichier, non versionné.
 // Contenu attendu de Local.xcconfig :
 //   DEVELOPMENT_TEAM = <identifiant de l'équipe>
-//   OWNTONE_URL = http:/$()/<adresse d'OwnTone>:3689
-//   PLATINE_PORTIER = https:/$()/<nom public du portier>   (commandes de l'écran verrouillé, voir portier/)
+//   PLATINE_PORTIER = https:/$()/<nom public du portier>   (voir portier/)
 //   PLATINE_JETON = <jeton du portier, celui du .env sur le NAS>
 CODE_SIGN_STYLE = Automatic
 #include? "Local.xcconfig"

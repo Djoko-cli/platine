@@ -37,13 +37,10 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: "Platine lit ce que joue OwnTone sur le réseau de la maison et lui transmet tes commandes."
-        NSBonjourServices:
-          - _daap._tcp
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-        # Adresse d'OwnTone par défaut, réglée dans Config/Local.xcconfig (non versionné).
-        OwnToneURL: $(OWNTONE_URL)
+        # Le portier (portier/), comme l'extension : un seul chemin, à la maison comme dehors, sans réseau local.
+        # Adresse et jeton réglés dans Config/Local.xcconfig (non versionné).
+        PlatinePortier: $(PLATINE_PORTIER)
+        PlatineJeton: $(PLATINE_JETON)
     entitlements:
       path: Platine/Platine.entitlements
       properties:

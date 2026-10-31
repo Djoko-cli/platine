@@ -12,7 +12,7 @@ struct ExtensionPlatine: RemoteMediaSessionExtension {
     }
 
     func session(_ attributs: PlatineAttributs) async throws -> SessionPlatine {
-        JournalPartage.noter("session demandée : \(attributs.etat), piste \(attributs.pisteID), \(attributs.appareils.count) appareil(s), \(SessionPlatine.portier == nil ? "OwnTone en direct" : "par le portier")")
+        JournalPartage.noter("session demandée : \(attributs.etat), piste \(attributs.pisteID), \(attributs.appareils.count) appareil(s), \(ClientOwnTone.adressePortier == nil ? "OwnTone en direct" : "par le portier")")
         return SessionPlatine(attributs: attributs)
     }
 }
@@ -32,24 +32,18 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
         self.attributs = attributs
     }
 
-    /// Le portier et son jeton (Info.plist, depuis Config/Local.xcconfig). iOS refuse le réseau local à l'extension :
-    /// sans portier, elle ne joint OwnTone qu'hors de la maison, par un tunnel.
-    static let portier = reglage("PlatinePortier")
-    private static let jeton = reglage("PlatineJeton")
+    /// Les volumes demandés pendant qu'un envoi est en cours : seule la dernière valeur de chaque sortie part.
+    private var volumesEnAttente: [String: Int] = [:]
+    private var volumesEnCours: Set<String> = []
 
-    private static func reglage(_ cle: String) -> String? {
-        (Bundle.main.object(forInfoDictionaryKey: cle) as? String).flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    private var client: ClientOwnTone? {
-        if let portier = Self.portier { return ClientOwnTone(adresse: portier, jeton: Self.jeton) }
-        return ClientOwnTone(adresse: attributs.serveur)
-    }
+    /// Le portier : iOS refuse le réseau local à l'extension. Sans portier, elle ne joint OwnTone que par l'adresse
+    /// transmise par l'app, donc hors de la maison, par un tunnel.
+    private var client: ClientOwnTone? { ClientOwnTone.portier ?? ClientOwnTone(adresse: attributs.serveur) }
 
     /// La pochette servie par OwnTone pointe vers son adresse locale : on la fait passer par le portier. Une pochette
     /// hébergée ailleurs reste telle quelle (et ne reçoit pas le jeton).
     private var adressePochette: String {
-        guard let portier = Self.portier.flatMap({ URLComponents(string: $0) }),
+        guard let portier = ClientOwnTone.adressePortier.flatMap({ URLComponents(string: $0) }),
               var pochette = URLComponents(string: attributs.pochette),
               pochette.host == URL(string: attributs.serveur)?.host else {
             return attributs.pochette
@@ -144,18 +138,26 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
         }
     }
 
-    /// Règle le volume d'une sortie. Pas de relecture : elle ferait sauter le curseur pendant qu'on le fait glisser.
+    /// Règle le volume d'une sortie. Un curseur qui glisse envoie une rafale de valeurs : pendant qu'un envoi est en
+    /// cours, seule la dernière valeur est gardée, puis envoyée. Pas de relecture d'OwnTone : elle ferait sauter le
+    /// curseur pendant qu'on le fait glisser.
     private func changerVolume(_ niveau: Int, sortie: String) async throws {
-        JournalPartage.noter("volume demandé : \(niveau) pour la sortie \(sortie)")
-        guard let client else { throw URLError(.badURL) }
-        do {
-            try await client.volume(niveau, sortie: sortie)
-        } catch {
-            JournalPartage.noter("volume en échec : \(JournalPartage.resumer(error))")
-            throw error
-        }
         if let index = attributs.appareils.firstIndex(where: { $0.id == sortie }) {
             attributs.appareils[index].volume = niveau
+        }
+        volumesEnAttente[sortie] = niveau
+        guard !volumesEnCours.contains(sortie) else { return }
+        guard let client else { throw URLError(.badURL) }
+        volumesEnCours.insert(sortie)
+        defer { volumesEnCours.remove(sortie) }
+        while let valeur = volumesEnAttente.removeValue(forKey: sortie) {
+            do {
+                try await client.volume(valeur, sortie: sortie)
+                JournalPartage.noter("volume envoyé : \(valeur) pour la sortie \(sortie)")
+            } catch {
+                JournalPartage.noter("volume en échec : \(JournalPartage.resumer(error))")
+                throw error
+            }
         }
     }
 }

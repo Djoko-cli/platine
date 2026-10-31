@@ -1,6 +1,5 @@
-// Platine, essai témoin des sessions distantes d'iOS 27 : l'app lit ce que joue OwnTone, démarre une session distante
-// avec cet état et la tient à jour tant qu'elle est ouverte (pas encore de push). Le journal à l'écran sert au banc.
-import Network
+// Platine, essai des sessions distantes d'iOS 27 : l'app lit ce que joue OwnTone par le portier, démarre une session
+// distante avec cet état et la tient à jour tant qu'elle est ouverte (pas encore de push). Le journal sert au banc.
 import NowPlaying
 import SwiftUI
 
@@ -18,21 +17,12 @@ struct PlatineApp: App {
 final class Relais {
     static let idSession = "owntone"
 
-    var adresse: String {
-        didSet { UserDefaults.standard.set(adresse, forKey: "adresse") }
-    }
     private(set) var journal: [String] = []
     private(set) var journalExtension: [String] = []
     private(set) var session: RemoteMediaSession<PlatineAttributs>?
     private(set) var dernier: PlatineAttributs?
     private var suivi: Task<Void, Never>?
     private var lectureJournal: Task<Void, Never>?
-    private var navigateur: NWBrowser?
-
-    init() {
-        let parDefaut = Bundle.main.object(forInfoDictionaryKey: "OwnToneURL") as? String ?? ""
-        adresse = UserDefaults.standard.string(forKey: "adresse") ?? parDefaut
-    }
 
     func noter(_ texte: String) {
         journal.insert("\(Date.now.formatted(date: .omitted, time: .standard))  \(texte)", at: 0)
@@ -48,7 +38,6 @@ final class Relais {
             }
         }
         noter(JournalPartage.fichier == nil ? "conteneur partagé introuvable" : "conteneur partagé disponible")
-        demanderReseauLocal()
         do {
             let ouvertes = try await RemoteMediaSession<PlatineAttributs>.sessions()
             noter("sessions ouvertes : \(ouvertes.count)")
@@ -62,31 +51,8 @@ final class Relais {
         noter("jeton de démarrage par push : \(RemoteMediaSession<PlatineAttributs>.pushToStartToken == nil ? "absent" : "présent")")
     }
 
-    /// Cherche OwnTone par Bonjour : c'est ce qui fait poser à iOS la question de l'accès au réseau local. L'extension
-    /// dépend de cette autorisation de l'app pour joindre OwnTone (pochette, commandes, volume).
-    private func demanderReseauLocal() {
-        navigateur?.cancel()
-        let navigateur = NWBrowser(for: .bonjour(type: "_daap._tcp", domain: nil), using: .tcp)
-        navigateur.stateUpdateHandler = { [weak self] etat in
-            let texte: String? = switch etat {
-            case .ready: "réseau local : recherche Bonjour active"
-            case .waiting(let erreur): "réseau local : en attente (\(erreur))"
-            case .failed(let erreur): "réseau local : échec (\(erreur))"
-            default: nil
-            }
-            guard let texte else { return }
-            Task { @MainActor in self?.noter(texte) }
-        }
-        navigateur.browseResultsChangedHandler = { [weak self] resultats, _ in
-            let nombre = resultats.count
-            Task { @MainActor in self?.noter("réseau local : \(nombre) service(s) OwnTone trouvé(s)") }
-        }
-        navigateur.start(queue: .main)
-        self.navigateur = navigateur
-    }
-
     func demarrer() async {
-        guard let client = ClientOwnTone(adresse: adresse) else { return noter("adresse d'OwnTone invalide") }
+        guard let client = ClientOwnTone.portier else { return noter("portier non réglé (Config/Local.xcconfig)") }
         do {
             let etat = try await client.lireEtat(id: Self.idSession)
             noter("OwnTone : \(etat.etat), \(etat.titre.isEmpty ? "aucune piste" : etat.titre), \(etat.appareils.count) sortie(s)")
@@ -135,7 +101,7 @@ final class Relais {
         suivi = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                guard let self, let session = self.session, let client = ClientOwnTone(adresse: self.adresse) else { continue }
+                guard let self, let session = self.session, let client = ClientOwnTone.portier else { continue }
                 guard let etat = try? await client.lireEtat(id: Self.idSession) else { continue }
                 guard etat.signature != self.dernier?.signature else { continue }
                 do {
@@ -157,10 +123,7 @@ struct Ecran: View {
         NavigationStack {
             Form {
                 Section("OwnTone") {
-                    TextField("http://adresse-du-nas:3689", text: $relais.adresse)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    LabeledContent("Portier", value: ClientOwnTone.portier?.serveur.host() ?? "non réglé")
                 }
                 Section("Session distante") {
                     Button("Démarrer ou mettre à jour") { Task { await relais.demarrer() } }

@@ -1,5 +1,6 @@
 // Platine, essai des sessions distantes d'iOS 27 : l'app lit ce que joue OwnTone par le portier, démarre une session
-// distante avec cet état et la tient à jour tant qu'elle est ouverte (pas encore de push). Le journal sert au banc.
+// distante avec cet état et la tient à jour tant qu'elle est ouverte. App fermée, le relais du NAS (relais/) tient la
+// carte à jour par des push ; l'app lui donne son jeton de démarrage. Le journal sert au banc.
 import NowPlaying
 import SwiftUI
 

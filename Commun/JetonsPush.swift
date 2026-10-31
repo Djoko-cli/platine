@@ -22,21 +22,25 @@ enum JetonsPush {
     static func donnerDemarrage(_ jeton: Data) async -> String {
         let hex = hexadecimal(jeton)
         ecrire("jetons-demarrage.json") { $0["demarrage"] = hex }
-        return await envoyer(type: "demarrage", session: "", jeton: hex)
+        return await envoyer(type: "demarrage", session: "", jeton: hex, fichier: "jetons-demarrage.json", cle: "demarrage")
     }
 
     /// Par l'extension.
     static func donnerSession(_ id: String, jeton: Data) async -> String {
         let hex = hexadecimal(jeton)
         ecrire("jetons-session.json") { $0[id] = hex }
-        return await envoyer(type: "session", session: id, jeton: hex)
+        return await envoyer(type: "session", session: id, jeton: hex, fichier: "jetons-session.json", cle: id)
+    }
+
+    private static func lire(_ nom: String) -> [String: String] {
+        guard let fichier = fichier(nom) else { return [:] }
+        return (try? Data(contentsOf: fichier)).flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
     }
 
     private static func ecrire(_ nom: String, _ changement: @Sendable (inout [String: String]) -> Void) {
         guard let fichier = fichier(nom) else { return }
         verrou.withLock {
-            var contenu = (try? Data(contentsOf: fichier)).flatMap { try? JSONDecoder().decode([String: String].self, from: $0) }
-                ?? [:]
+            var contenu = lire(nom)
             changement(&contenu)
             if let data = try? JSONEncoder().encode(contenu) {
                 try? data.write(to: fichier, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
@@ -44,13 +48,26 @@ enum JetonsPush {
         }
     }
 
-    private static func envoyer(type: String, session: String, jeton: String) async -> String {
+    /// Quatre essais au plus : aussitôt, puis après 2, 10 et 30 s. iOS ne réveille l'extension que peu de temps, et
+    /// sans le jeton de session, le relais ne peut ni mettre la carte à jour ni la terminer. Un jeton remplacé
+    /// entre-temps par un plus récent n'est plus envoyé : il écraserait le bon chez le relais.
+    private static func envoyer(type: String, session: String, jeton: String, fichier nom: String,
+                                cle: String) async -> String {
         guard let portier = ClientOwnTone.portier else { return "relais : portier non réglé" }
-        do {
-            try await portier.donnerJeton(type: type, session: session, jeton: jeton)
-            return "donné au relais"
-        } catch {
-            return "relais injoignable : \(JournalPartage.resumer(error))"
+        var erreur = ""
+        for (essai, attente) in [0, 2, 10, 30].enumerated() {
+            if attente > 0 {
+                try? await Task.sleep(for: .seconds(attente))
+                if Task.isCancelled { return "envoi abandonné" }
+                guard verrou.withLock({ lire(nom)[cle] }) == jeton else { return "remplacé par un jeton plus récent" }
+            }
+            do {
+                try await portier.donnerJeton(type: type, session: session, jeton: jeton)
+                return essai == 0 ? "donné au relais" : "donné au relais (essai \(essai + 1))"
+            } catch {
+                erreur = JournalPartage.resumer(error)
+            }
         }
+        return "relais injoignable après 4 essais : \(erreur)"
     }
 }

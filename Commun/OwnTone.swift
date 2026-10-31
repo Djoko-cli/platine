@@ -144,6 +144,7 @@ struct ClientOwnTone: Sendable {
     func donnerJeton(type: String, session: String, jeton: String) async throws {
         var demande = demande(serveur.appending(path: "platine/jetons"))
         demande.httpMethod = "POST"
+        demande.timeoutInterval = 10  // les nouveaux essais de JetonsPush.envoyer tiennent dans le temps de l'extension
         demande.setValue("application/json", forHTTPHeaderField: "Content-Type")
         demande.httpBody = try JSONEncoder().encode(["type": type, "session": session, "jeton": jeton])
         let (_, reponse) = try await URLSession.shared.data(for: demande)

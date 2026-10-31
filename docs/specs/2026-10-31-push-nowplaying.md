@@ -133,6 +133,8 @@ depuis le Mac : relais (`donnees/relais.log` par ssh), extension (`scripts/essai
   elle prend l'écran verrouillé dès que l'utilisateur la touche dans le Centre de contrôle. Démarrée app au premier
   plan, elle le prend d'emblée. iOS donne donc l'écran verrouillé à une session distante après une interaction de
   l'utilisateur, ou quand elle démarre app ouverte ; une fois prise, la place reste, app fermée.
+- **Lignes des appareils :** iOS les range lui-même, par ordre alphabétique d'après les essais ; la ligne de la paire,
+  renommée, est passée en fin de liste, quel que soit l'ordre donné par l'extension.
 - **Extension périmée :** la première push après une réinstallation réveille l'ancienne extension, qui voit le nouveau
   binaire et s'arrête ; la nouvelle prend la suite environ 4 s plus tard.
 - **Websocket d'OwnTone :** stable (pings toutes les 30 s acceptés, aucune coupure en plus d'une heure).

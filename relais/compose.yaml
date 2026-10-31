@@ -1,0 +1,36 @@
+# Relais des push de Platine (voir main.go). Sur le NAS, dans le dossier du conteneur, posés par relais/deployer.sh :
+# ce fichier, le Dockerfile, le binaire, la clé APNs (AuthKey.p8, droits 600) et un .env (droits 600, jamais versionné) :
+#   PORTIER=https://<nom public>   l'adresse que l'extension joint (commandes, pochettes)
+#   APNS_EQUIPE=<équipe>           APNS_CLE_ID=<identifiant de la clé>
+#   RELAIS_UID=<uid>               RELAIS_GID=<gid>   le propriétaire de la clé et de donnees/
+#   TZ=<fuseau>                    pour l'heure du journal
+# Le relais n'écoute que sur 127.0.0.1:18090 (le portier lui passe les jetons) et ne sort que vers APNs.
+services:
+  relais:
+    build: .
+    image: platine-relais
+    container_name: platine-relais
+    # Réseau de l'hôte : joint OwnTone sur 127.0.0.1 (3689 et 3688), écoute sur 127.0.0.1:18090.
+    network_mode: host
+    restart: unless-stopped
+    user: "${RELAIS_UID:?RELAIS_UID manquant dans .env}:${RELAIS_GID:?RELAIS_GID manquant dans .env}"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 32m
+    memswap_limit: 32m
+    env_file: .env
+    environment:
+      GOMEMLIMIT: 24MiB
+      JOURNAL: /donnees/relais.log
+    volumes:
+      - ./AuthKey.p8:/cle/AuthKey.p8:ro
+      # Les jetons (jetons.json) et le journal, lisible par ssh sans sudo.
+      - ./donnees:/donnees
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "3"

@@ -14,6 +14,8 @@ PlatineSession/Info.plist
 Config/Local.xcconfig
 garde.local.txt
 *.p8
+.env
+donnees/
 
 # Dossiers de travail
 .superpowers/

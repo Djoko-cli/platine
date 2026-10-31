@@ -30,6 +30,7 @@ targets:
       path: Platine/Info.plist
       properties:
         CFBundleDisplayName: Platine
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -62,15 +63,22 @@ targets:
       path: PlatineSession/Info.plist
       properties:
         CFBundleDisplayName: Platine
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         EXAppExtensionAttributes:
           EXExtensionPointIdentifier: com.apple.nowplaying.remote-media
         NSLocalNetworkUsageDescription: "Platine transmet tes commandes à OwnTone sur le réseau de la maison."
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
-          # L'adresse Tailscale d'OwnTone (essai témoin) est une IP en clair : exception le temps de l'essai.
-          NSAllowsArbitraryLoads: true
-        # Adresse d'OwnTone par Tailscale pour la sonde réseau, réglée dans Config/Local.xcconfig (non versionné).
+          # OwnTone par son nom Tailscale, en HTTP dans le tunnel chiffré de Tailscale.
+          NSExceptionDomains:
+            ts.net:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
+        # Adresse d'OwnTone par Tailscale, réglée dans Config/Local.xcconfig (non versionné). Quand elle est réglée,
+        # l'extension l'utilise pour les commandes, le volume et la pochette : iOS lui refuse le réseau local.
         PlatineSondeTailscale: $(OWNTONE_URL_TAILSCALE)
+        # Adresse publique de la maison pour la sonde réseau (essai témoin), réglée dans Config/Local.xcconfig.
+        PlatineSondePublique: $(PLATINE_SONDE_PUBLIQUE)
     entitlements:
       path: PlatineSession/PlatineSession.entitlements
       properties:

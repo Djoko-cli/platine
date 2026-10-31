@@ -4,5 +4,6 @@
 //   DEVELOPMENT_TEAM = <identifiant de l'équipe>
 //   OWNTONE_URL = http:/$()/<adresse d'OwnTone>:3689
 //   OWNTONE_URL_TAILSCALE = http:/$()/<adresse Tailscale d'OwnTone>:3689   (facultatif, sonde réseau)
+//   PLATINE_SONDE_PUBLIQUE = https:/$()/<adresse publique de la maison>:8443   (facultatif, sonde réseau)
 CODE_SIGN_STYLE = Automatic
 #include? "Local.xcconfig"

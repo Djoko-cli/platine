@@ -13,23 +13,34 @@ struct ExtensionPlatine: RemoteMediaSessionExtension {
 
     func session(_ attributs: PlatineAttributs) async throws -> SessionPlatine {
         JournalPartage.noter("session demandée : \(attributs.etat), piste \(attributs.pisteID), \(attributs.appareils.count) appareil(s)")
-        Task { await Self.sonderReseau(serveur: attributs.serveur) }
+        // Attendue avant de rendre la carte : iOS endort l'extension peu après, et une sonde laissée en route est perdue.
+        await Self.sonderReseau(serveur: attributs.serveur)
         return SessionPlatine(attributs: attributs)
     }
 
-    /// Essai témoin : quels chemins réseau l'extension a-t-elle le droit d'emprunter ?
+    /// Essai témoin : quels chemins réseau l'extension a-t-elle le droit d'emprunter ? Toutes les sondes partent en
+    /// même temps, 4 s au plus.
     private static func sonderReseau(serveur: String) async {
-        var cibles = [("Internet", "https://www.apple.com/library/test/success.html"), ("réseau local", serveur + "/api/config")]
+        var cibles: [(String, String)] = []
+        if let publique = Bundle.main.object(forInfoDictionaryKey: "PlatineSondePublique") as? String, !publique.isEmpty {
+            // Port fermé exprès : seule compte la nature de l'erreur (refus d'iOS ou absence de réponse).
+            cibles.append(("adresse publique", publique + "/"))
+        }
+        cibles += [("Internet", "https://www.apple.com/library/test/success.html"), ("réseau local", serveur + "/api/config")]
         if let tailscale = Bundle.main.object(forInfoDictionaryKey: "PlatineSondeTailscale") as? String, !tailscale.isEmpty {
             cibles.append(("Tailscale", tailscale + "/api/config"))
         }
-        for (nom, adresse) in cibles {
-            guard let url = URL(string: adresse) else { continue }
-            do {
-                let (_, reponse) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 5))
-                JournalPartage.noter("sonde \(nom) : HTTP \((reponse as? HTTPURLResponse)?.statusCode ?? 0)")
-            } catch {
-                JournalPartage.noter("sonde \(nom) : \(JournalPartage.resumer(error))")
+        await withTaskGroup(of: Void.self) { groupe in
+            for (nom, adresse) in cibles {
+                guard let url = URL(string: adresse) else { continue }
+                groupe.addTask {
+                    do {
+                        let (_, reponse) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 4))
+                        JournalPartage.noter("sonde \(nom) : HTTP \((reponse as? HTTPURLResponse)?.statusCode ?? 0)")
+                    } catch {
+                        JournalPartage.noter("sonde \(nom) : \(JournalPartage.resumer(error))")
+                    }
+                }
             }
         }
     }
@@ -50,13 +61,27 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
         self.attributs = attributs
     }
 
-    private var client: ClientOwnTone? { ClientOwnTone(adresse: attributs.serveur) }
+    /// L'adresse Tailscale d'OwnTone quand elle est réglée (iOS refuse le réseau local à l'extension), sinon celle
+    /// que l'app a transmise.
+    private static let adresseTailscale = (Bundle.main.object(forInfoDictionaryKey: "PlatineSondeTailscale") as? String)
+        .flatMap { $0.isEmpty ? nil : $0 }
+
+    private var client: ClientOwnTone? { ClientOwnTone(adresse: Self.adresseTailscale ?? attributs.serveur) }
+
+    /// La pochette donnée par OwnTone pointe vers son adresse locale : on la fait passer par la même adresse que les
+    /// commandes.
+    private var adressePochette: String {
+        guard let tailscale = Self.adresseTailscale, attributs.pochette.hasPrefix(attributs.serveur) else {
+            return attributs.pochette
+        }
+        return tailscale + attributs.pochette.dropFirst(attributs.serveur.count)
+    }
 
     var content: (any MediaContentRepresentable)? {
         guard attributs.pisteID != 0 else { return nil }
         let client = client
         let piste = attributs.pisteID
-        let pochette = attributs.pochette
+        let pochette = adressePochette
         return MusicContent(
             id: String(piste),
             songTitle: attributs.titre,
@@ -121,7 +146,7 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
 
     /// Envoie la commande, puis relit l'état d'OwnTone : la carte suit sans attendre une mise à jour de l'app.
     private func commander(_ nom: String, _ action: (ClientOwnTone) async throws -> Void) async throws {
-        JournalPartage.noter("commande reçue : \(nom) → \(attributs.serveur)")
+        JournalPartage.noter("commande reçue : \(nom) → \(client?.serveur.host() ?? "?")")
         guard let client else { throw URLError(.badURL) }
         do {
             try await action(client)

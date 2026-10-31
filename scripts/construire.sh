@@ -33,9 +33,10 @@ echo "== xcodegen"
 xcodegen --quiet
 echo "== compilation"
 # Compilation générique : l'iPhone n'a pas à être déverrouillé pour compiler, seulement pour installer.
+# Le numéro de build change à chaque fois : sinon iOS garde en cache l'extension de la version d'avant.
 set +e
 xcodebuild -project Platine.xcodeproj -scheme Platine -configuration Debug -destination "generic/platform=iOS" \
-  -derivedDataPath build -allowProvisioningUpdates build 2>&1 \
+  -derivedDataPath build -allowProvisioningUpdates CURRENT_PROJECT_VERSION="$(date +%Y%m%d%H%M%S)" build 2>&1 \
   | grep -E 'error:|warning:|\*\* BUILD|Provisioning|provisioning' | grep -v 'appintentsmetadataprocessor' | masquer
 code=${PIPESTATUS[0]}
 set -e

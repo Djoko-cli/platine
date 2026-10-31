@@ -27,7 +27,7 @@ services:
       JOURNAL: /donnees/relais.log
     volumes:
       - ./AuthKey.p8:/cle/AuthKey.p8:ro
-      # Les jetons (jetons.json) et le journal, lisible par ssh sans sudo.
+      # Les jetons (jetons.json) et le journal (relais.log), lisible par ssh.
       - ./donnees:/donnees
     logging:
       driver: json-file

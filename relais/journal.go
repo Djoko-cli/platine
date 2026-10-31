@@ -1,5 +1,5 @@
-// Le fichier du journal : sur le NAS, docker logs exige sudo ; ce fichier se lit par ssh. Au-delà de 1 Mo, il passe
-// en .1 (un seul ancien gardé).
+// Le fichier du journal : il survit à la recréation du conteneur et se lit par un simple ssh (tail -F). Au-delà de
+// 1 Mo, il passe en .1 (un seul ancien gardé).
 package main
 
 import (

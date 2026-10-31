@@ -1,8 +1,8 @@
 #!/bin/bash
 # Pose le relais sur le NAS, avec la route des jetons du portier, puis le lance.
 #   relais/deployer.sh            compile, copie, et sauvegarde le Caddyfile du portier en Caddyfile.precedent
-#   relais/deployer.sh lancer     construit et démarre le relais, puis redémarre le portier (sa config est relue au
-#                                 démarrage seulement : admin off)
+#   relais/deployer.sh lancer     construit et démarre le relais, puis redémarre le portier si son Caddyfile a changé
+#                                 (sa config n'est relue qu'au démarrage : admin off)
 #   relais/deployer.sh verifier   après le lancement : refus du portier et route des jetons, par le nom public
 # Sur le NAS, docker répond sans sudo par son chemin complet (/usr/local/bin n'est pas dans le PATH d'une session ssh).
 # Compile le binaire linux/amd64, copie binaire, Dockerfile et compose.yaml dans le dossier du relais, la clé APNs et
@@ -16,7 +16,12 @@ docker=/usr/local/bin/docker
 lire() { sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$racine/Config/Local.xcconfig" | sed 's/\$()//g' | tail -1; }
 
 if [ "${1:-}" = lancer ]; then
-  ssh "$nas" "cd '$dossier' && $docker compose up -d --build && $docker restart platine-portier"
+  ssh "$nas" "cd '$dossier' && $docker compose up -d --build"
+  if ssh "$nas" "test -f '$dossier/.portier-a-redemarrer'"; then
+    ssh "$nas" "$docker restart platine-portier && rm -f '$dossier/.portier-a-redemarrer'"
+  else
+    echo "portier : Caddyfile inchangé, pas de redémarrage"
+  fi
   exit
 fi
 
@@ -49,7 +54,7 @@ echo "== copie vers le NAS"
 # Les ACL du dossier partagé de DSM passent outre umask (fichiers créés en rwxrwxrwx+) ; chmod les retire. Un secret
 # reçoit ses droits avant son contenu : il n'est jamais lisible par d'autres, même un instant.
 envoyer() { ssh "$nas" "cat > '$2' && chmod ${3:-644} '$2'" < "$1"; }
-envoyer_secret() { ssh "$nas" "rm -f '$2' && : > '$2' && chmod 600 '$2' && cat > '$2'"; }
+envoyer_secret() { ssh "$nas" "rm -f '$1' && : > '$1' && chmod 600 '$1' && cat > '$1'"; }
 ssh "$nas" "mkdir -p '$dossier/donnees' && chmod 700 '$dossier/donnees'"
 envoyer build/relais "$dossier/relais" 755
 envoyer Dockerfile "$dossier/Dockerfile"
@@ -80,6 +85,7 @@ if ssh "$nas" "cat '$portier/Caddyfile'" | cmp -s - "$racine/portier/Caddyfile";
 else
   ssh "$nas" "cp -p '$portier/Caddyfile' '$portier/Caddyfile.precedent'"
   ssh "$nas" "cat > '$portier/Caddyfile'" < "$racine/portier/Caddyfile"  # droits d'origine gardés
+  ssh "$nas" ": > '$dossier/.portier-a-redemarrer'"  # pour « lancer »
   echo "Caddyfile du portier : à jour (l'ancien en Caddyfile.precedent)"
 fi
 

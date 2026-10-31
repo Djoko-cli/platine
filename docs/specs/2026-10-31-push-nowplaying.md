@@ -102,6 +102,8 @@ Push envoyées à la main depuis le Mac (`scripts/essai-push.py`), journal syst�
   lecture et pause n'y change rien. Une fois, sans aucune enceinte active, la demande a échoué (`internalFailure`).
 - **Hypothèse non tranchée :** la tuile native des HomePod (MediaRemote d'OwnTone) serait ce point retenu. À vérifier
   en coupant MediaRemote dans OwnTone, avec des enceintes actives.
+- **Paire stéréo :** réunie en une seule ligne de la carte, elle s'affiche avec l'icône « deux enceintes » (type
+  `speakerGroup`, iOS 27.2) ; aucun type ne donne l'icône d'un HomePod.
 - **Confirmé dans le journal :** `mediaremoted` applique une « Network restriction » à l'extension (d'où le refus du
   réseau local) ; il range la session distante sous un HomePod.
 

@@ -143,8 +143,10 @@ depuis le Mac : relais (`donnees/relais.log` par ssh), extension (`scripts/essai
 
 ## Questions ouvertes
 
-1. **Carte fermée depuis l'iPhone :** si l'utilisateur ferme la session sur l'iPhone, le relais l'ignore jusqu'au refus
-   d'APNs (jeton périmé), puis repart par start à la lecture suivante. Comportement réel à observer.
+1. **Carte fermée depuis l'iPhone :** le relais ne l'apprend que par un refus d'APNs (jeton périmé), à la push suivante.
+   Il oublie alors la session et repart par start dès la relève suivante (au plus une minute), donc pendant la même
+   lecture : la carte fermée reviendrait. Comportement d'iOS et d'APNs à observer, puis à trancher (attendre plutôt la
+   lecture suivante ?).
 2. **Priorité des push :** toutes partent en priorité 10 (immédiate). Une priorité 5 pour les update ménagerait la
    batterie et le quota, au risque d'un retard d'affichage.
 3. **MediaRemote d'OwnTone :** l'écran verrouillé s'obtient sans le couper (règle ci-dessus). Le couper reste à décider,

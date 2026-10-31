@@ -141,16 +141,17 @@ depuis le Mac : relais (`donnees/relais.log` par ssh), extension (`scripts/essai
 - **NAS :** docker répond sans sudo par `/usr/local/bin/docker` (absent du PATH d'une session ssh). Les ACL du dossier
   partagé passent outre umask : les droits des secrets sont posés explicitement (`relais/deployer.sh`).
 
-## Questions ouvertes
+## Questions tranchées par Djoko (31/10/2026)
 
 1. **Carte fermée depuis l'iPhone :** le relais ne l'apprend que par un refus d'APNs (jeton périmé), à la push suivante.
    Il oublie alors la session et repart par start dès la relève suivante (au plus une minute), donc pendant la même
-   lecture : la carte fermée reviendrait. Comportement d'iOS et d'APNs à observer, puis à trancher (attendre plutôt la
-   lecture suivante ?).
-2. **Priorité des push :** toutes partent en priorité 10 (immédiate). Une priorité 5 pour les update ménagerait la
-   batterie et le quota, au risque d'un retard d'affichage.
-3. **MediaRemote d'OwnTone :** l'écran verrouillé s'obtient sans le couper (règle ci-dessus). Le couper reste à décider,
-   selon que la tuile native du HomePod gêne ou non.
+   lecture. **Décision : on garde ce comportement** (la carte revient dans la minute tant que la musique joue).
+2. **Priorité des push :** toutes partent en priorité 10 (immédiate). **Décision : on garde 10** tant qu'Apple ne
+   rationne pas ; un refus pour excès (HTTP 429) paraîtrait dans le journal du relais (« push en échec »).
+3. **MediaRemote d'OwnTone :** l'écran verrouillé s'obtient sans le couper (règle ci-dessus). **Décision : le couper**
+   (`mediaremote = false` dans la configuration d'OwnTone : seule la tuile native des HomePod disparaît ; leurs commandes
+   et le suivi du volume passent par AirPlay). Le relais n'a rien à changer. À observer ensuite : la carte prend-elle
+   l'écran verrouillé sans qu'on la touche ?
 
 ## Les décisions (validées par Djoko le 31/10/2026)
 

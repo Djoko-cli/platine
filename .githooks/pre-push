@@ -1,30 +1,103 @@
 #!/bin/bash
-# Refuse le push si un commit poussé a un auteur ou un committer hors noreply,
-# si ses ajouts ou son message contiennent une fuite (voir garde-commun.sh),
-# ou si un fichier suivi de la tête poussée contient une valeur de la liste locale.
-set -u
-. "$(git rev-parse --show-toplevel)/.githooks/garde-commun.sh"
-zero=0000000000000000000000000000000000000000
-motifs=$(mktemp); trap 'rm -f "$motifs"' EXIT
+# Refuse le push si le nom publié d'une ref contient une fuite ; si un commit poussé a un
+# auteur ou un committer hors noreply, ou si ses noms de fichiers, ses ajouts (binaires et
+# fusions compris), ses noms d'auteur ou son message contiennent une fuite ; si un tag
+# annoté poussé (tags imbriqués compris) en contient une ou a un tagger hors noreply ; si
+# une ref vise autre chose qu'un commit ; ou si l'arbre de la tête poussée a un nom de
+# fichier fautif ou un contenu qui contient une valeur de la liste locale (voir garde-commun.sh).
+# Commits examinés : tous ceux que le dépôt distant n'a pas, d'après ses têtes réelles
+# (git ls-remote), jamais d'après les branches suivies d'ici, qui peuvent être périmées ou
+# venir d'un autre remote. Sans réponse du dépôt distant (ou à blanc) : tout l'historique poussé.
+set -u -o pipefail
+. "$(dirname "$0")/garde-commun.sh" || exit 1   # les fonctions du même garde que ce crochet
+garde_debut pre-push
 garde_motifs pre-push "$motifs" || exit 1
-fautifs=0
+url=${2:-}   # dépôt distant visé ; vide quand le crochet est lancé à blanc
+refs="$garde_tmp/refs"; distants="$garde_tmp/distants"; vus="$garde_tmp/vus"; arbres="$garde_tmp/arbres"
+: > "$vus"; : > "$arbres"   # têtes et arbres déjà examinés : un historique poussé sous plusieurs refs ne l'est qu'une fois
+cat > "$refs" || { echo "pre-push : liste des refs illisible : push refusé" >&2; exit 1; }
+fautifs=0; n=0
 signale() { echo "pre-push : $1" >&2; fautifs=$((fautifs + 1)); }
-while read -r ref_locale sha_local ref_distante sha_distant; do
-  [ "$sha_local" = "$zero" ] && continue   # suppression d'une branche
-  if [ "$sha_distant" = "$zero" ] || ! git cat-file -e "$sha_distant" 2>/dev/null; then
-    plage=$(git rev-list "$sha_local" --not --remotes)
-  else
-    plage=$(git rev-list "$sha_distant..$sha_local")
+examine() { # $1 : objet examiné ; le texte est dans $texte
+  local raisons r
+  raisons=$(garde_examine "$motifs" < "$texte") || [ -n "$raisons" ] || raisons="examen impossible"
+  while IFS= read -r r; do [ -n "$r" ] && signale "$1 : $r"; done <<< "$raisons"
+}
+nul() { case $1 in ''|*[!0]*) return 1 ;; esac; }   # identifiant nul (SHA-1 ou SHA-256)
+connus() { # une seule fois : « ^tête » pour chaque tête du dépôt distant déjà présente ici
+  [ -e "$distants" ] && return 0
+  : > "$distants"
+  [ -n "$url" ] || return 0   # à blanc : tout l'historique poussé
+  # GIT_TERMINAL_PROMPT=0 : jamais de seconde demande d'identifiants ; sans réponse, tout l'historique
+  if ! GIT_TERMINAL_PROMPT=0 git ls-remote --refs -- "$url" < /dev/null > "$garde_tmp/ls" 2>/dev/null; then
+    echo "pre-push : dépôt distant sans réponse : tout l'historique poussé est examiné" >&2
+    return 0
+  fi
+  awk '{print $1}' "$garde_tmp/ls" | git cat-file --batch-check='%(objectname) %(objecttype)' |
+    awk '$2 == "commit" || $2 == "tag" {print "^" $1}' > "$distants" || : > "$distants"
+}
+while read -r ref_locale sha_local ref_distante sha_distant <&3; do
+  nul "$sha_local" && continue   # suppression d'une ref
+  n=$((n + 1)); lib=$ref_distante
+  printf '%s\n' "$ref_distante" > "$texte"   # nom publié de la branche ou du tag
+  raisons=$(garde_examine "$motifs" < "$texte") || [ -n "$raisons" ] || raisons="examen impossible"
+  if [ -n "$raisons" ]; then
+    lib="ref poussée n°$n"   # nom fautif : masqué dans les messages
+    while IFS= read -r r; do [ -n "$r" ] && signale "$lib : nom : $r"; done <<< "$raisons"
+  fi
+  if ! nul "$sha_distant" && git cat-file -e "$sha_distant" 2>/dev/null; then
+    plage=$({ printf '%s\n^%s\n' "$sha_local" "$sha_distant"; cat "$vus"; } | git rev-list --stdin) || { signale "$lib : liste des commits illisible"; continue; }
+  else   # ref neuve, ou tête distante inconnue ici
+    connus
+    plage=$({ echo "$sha_local"; cat "$distants" "$vus"; } | git rev-list --stdin) || { signale "$lib : liste des commits illisible"; continue; }
   fi
   for c in $plage; do
     court=$(git log -1 --format=%h "$c")
     ae=$(git log -1 --format=%ae "$c"); ce=$(git log -1 --format=%ce "$c")
     { [ "$ae" = "$garde_attendu" ] && [ "$ce" = "$garde_attendu" ]; } || signale "commit $court : auteur ou committer hors noreply"
-    raisons=$( { git diff-tree -p -r --root --no-commit-id --no-color "$c" | grep -E '^\+' | grep -vE '^\+\+\+ '; git log -1 --format=%B "$c"; } | garde_examine "$motifs")
-    while IFS= read -r r; do [ -n "$r" ] && signale "commit $court : $r"; done <<< "$raisons"
+    # noms de fichiers (sauf supprimés), lignes ajoutées (-m : résolution des fusions), noms d'auteur et message
+    if { git diff-tree -r --root -m -z --name-only --diff-filter=d --no-commit-id "$c" | tr '\000' '\n' &&
+         git diff-tree -p -r --root -m --text --no-ext-diff --no-textconv --no-color --no-commit-id "$c" | tr -d '\000' | garde_ajouts &&
+         git log -1 --format='%an%n%cn%n%B' "$c"; } > "$texte"; then
+      examine "commit $court"
+    else
+      signale "commit $court : lecture impossible"
+    fi
   done
-  if git grep -qiIF -f "$motifs" "$sha_local" -- . 2>/dev/null; then
-    signale "un fichier suivi de $ref_locale contient un identifiant réel de la liste locale"
+  # tags annotés, même imbriqués : message et tagger de chacun, jusqu'à l'objet visé
+  objet=$sha_local; i=0
+  while [ "$(git cat-file -t "$objet" 2>/dev/null)" = tag ] && [ "$i" -lt 20 ]; do
+    i=$((i + 1))
+    if git cat-file tag "$objet" > "$texte"; then
+      examine "tag $lib"
+      [ "$(sed -n -e '/^$/q' -e 's/^tagger .*<\(.*\)> .*/\1/p' "$texte")" = "$garde_attendu" ] || signale "tag $lib : tagger hors noreply"
+      objet=$(sed -n '1s/^object //p' "$texte")
+    else
+      signale "tag $lib : lecture impossible"; objet=; break
+    fi
+  done
+  vise=$(git cat-file -t "$objet" 2>/dev/null)
+  if [ "$vise" != commit ]; then   # un arbre ou un fichier poussé sans commit échapperait à l'examen
+    signale "$lib : vise un objet « ${vise:-illisible} » et non un commit"
+    continue
   fi
-done
+  echo "^$objet" >> "$vus"
+  arbre=$(git rev-parse "$objet^{tree}") && grep -qx "$arbre" "$arbres" && continue
+  echo "$arbre" >> "$arbres"
+  # arbre de la tête poussée : tous les noms de fichiers, et le contenu comparé à la liste
+  # (en locale UTF-8 : sinon git grep -i ne replie pas la casse des lettres accentuées ;
+  # un fichier illisible n'est signalé que sur la sortie d'erreur, le code restant 1)
+  if git ls-tree -r -z --name-only "$objet" | tr '\000' '\n' > "$texte"; then
+    examine "arbre de $lib"
+  else
+    signale "arbre de $lib : lecture impossible"
+  fi
+  LC_ALL=en_US.UTF-8 git grep -q -i -a -F -f "$motifs" "$objet" -- . 2> "$garde_tmp/grep.err"
+  code=$?; [ "$code" = 1 ] && [ -s "$garde_tmp/grep.err" ] && code=2
+  case $code in
+    0) signale "un fichier suivi de $lib contient un identifiant réel de la liste locale" ;;
+    1) ;;
+    *) signale "arbre de $lib : examen du contenu impossible" ;;
+  esac
+done 3< "$refs"
 [ "$fautifs" -eq 0 ] || { echo "pre-push : push refusé ($fautifs problème(s))." >&2; exit 1; }

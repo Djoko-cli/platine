@@ -104,6 +104,32 @@ prints the extension's log from the Mac.
 - Comments, logs and the specification are written in French.
 - Not affiliated with Apple or with the OwnTone project.
 
+### Leak guard
+
+This repository is public, so `.githooks/` holds a guard that refuses a commit or a push that would leak a real
+identifier: private, Tailscale or link-local IPv4 addresses, IPv6 ULA or global addresses, MAC addresses, Tailscale host
+names, `/Users/<name>` paths, and the values of a local list. It examines file names, added lines (binary files
+included), commit messages, author, committer and tagger names, annotated tags, the names of pushed branches and tags,
+and the pushed head (file names, and contents against the local list). When it cannot read what it must examine, it
+refuses.
+
+- Install it once per clone, and again after each update of `.githooks/`: `.githooks/essai-garde.sh --installe`. It
+  copies the guard into `.git/hooks`, so it still runs on an older branch, in a `git worktree` and after the repository
+  is moved.
+- Create `garde.local.txt` at the root of the repository (ignored by git, never shared): one real value per line (names,
+  rooms, devices, network names…), written with its accents. Empty lines and lines starting with `#` are ignored, and a
+  value is found whatever its case and accents. A `git worktree` uses the list of the main repository. Without the list,
+  every commit is refused.
+- The push check is the one that counts: `rebase`, `cherry-pick`, `am` and `merge` skip the commit check, and
+  `git commit -m` keeps the lines that start with `#`. Push with the `git` command line: an app that does not call `git`
+  skips the hooks. To tell new commits from published ones, the push check asks the remote for its branches
+  (`git ls-remote`); without an answer, it examines the whole pushed history.
+- It needs `perl` with the `Encode` and `Unicode::Normalize` modules (shipped with macOS).
+- `.githooks/essai-garde.sh` replays the guard's scenarios on throwaway repositories, and
+  `.githooks/essai-garde.sh --historique` runs the push check over the whole history of the repository.
+- In tests and examples, use only made-up values: `192.0.2.x`, `2001:db8::1`, `fd00::1`, `02:00:00:00:00:01`. Never
+  bypass the guard with `--no-verify`.
+
 ### License
 
 [MIT](LICENSE).
@@ -213,6 +239,32 @@ affiche depuis le Mac le journal de l'extension.
   l'icône générique. iOS range les lignes des appareils dans son propre ordre (alphabétique, d'après nos essais).
 - Commentaires, journaux et spécification sont en français.
 - Sans lien avec Apple ni avec le projet OwnTone.
+
+### Garde anti-fuite
+
+Ce dépôt est public. Son dossier `.githooks/` contient un garde qui refuse tout commit ou push qui laisserait fuir un
+identifiant réel : adresses IPv4 privées, Tailscale ou de lien local, adresses IPv6 ULA ou globales, adresses MAC, noms
+d'hôte Tailscale, chemins `/Users/<nom>` et valeurs d'une liste locale. Il examine les noms de fichiers, les lignes
+ajoutées (binaires compris), les messages de commit, les noms d'auteur, de committer et de tagger, les tags annotés, les
+noms des branches et des tags poussés, et la tête poussée (noms de fichiers, et contenu comparé à la liste locale).
+Quand il ne peut pas lire ce qu'il doit examiner, il refuse.
+
+- L'installer une fois par clone, puis après chaque mise à jour de `.githooks/` : `.githooks/essai-garde.sh --installe`.
+  Il copie le garde dans `.git/hooks` : il agit encore sur une ancienne branche, dans une copie `git worktree` et après
+  un déplacement du dépôt.
+- Créer `garde.local.txt` à la racine du dépôt (ignoré par git, jamais partagé) : une valeur réelle par ligne (noms,
+  pièces, appareils, noms de réseau…), écrite avec ses accents. Les lignes vides et celles qui commencent par `#` sont
+  ignorées, et une valeur est trouvée quelles que soient sa casse et ses accents. Une copie `git worktree` se sert de la
+  liste du dépôt principal. Sans liste, tout commit est refusé.
+- C'est le contrôle du push qui compte : `rebase`, `cherry-pick`, `am` et `merge` sautent celui du commit, et
+  `git commit -m` garde les lignes qui commencent par `#`. Pousser avec `git` en ligne de commande : une app qui
+  n'appelle pas `git` saute les crochets. Pour distinguer les commits neufs des commits publiés, le contrôle du push
+  demande ses branches au dépôt distant (`git ls-remote`) ; sans réponse, il examine tout l'historique poussé.
+- Il faut `perl`, avec les modules `Encode` et `Unicode::Normalize` (fournis avec macOS).
+- `.githooks/essai-garde.sh` rejoue les scénarios du garde sur des dépôts jetables, et
+  `.githooks/essai-garde.sh --historique` passe le contrôle du push sur tout l'historique du dépôt.
+- Dans les tests et les exemples, seulement des valeurs inventées : `192.0.2.x`, `2001:db8::1`, `fd00::1`,
+  `02:00:00:00:00:01`. Ne jamais contourner le garde par `--no-verify`.
 
 ### Licence
 

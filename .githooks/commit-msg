@@ -1,10 +1,17 @@
 #!/bin/bash
 # Refuse un message de commit qui contient une fuite (voir garde-commun.sh).
-set -u
-. "$(git rev-parse --show-toplevel)/.githooks/garde-commun.sh"
-motifs=$(mktemp); trap 'rm -f "$motifs"' EXIT
+# Les lignes # sont écartées comme le fait git quand il ouvre l'éditeur ; avec -m ou -F,
+# git les garde : le pre-push examine le message enregistré, lignes # comprises.
+set -u -o pipefail
+. "$(dirname "$0")/garde-commun.sh" || exit 1   # les fonctions du même garde que ce crochet
+garde_debut commit-msg
 garde_motifs commit-msg "$motifs" || exit 1
-raisons=$(grep -v '^#' "$1" | garde_examine "$motifs")
+# git commit -v : le diff sous la ligne de coupe n'appartient pas au message
+if ! sed -e '/^# -\{24\} >8 -\{24\}$/,$d' -e '/^#/d' "$1" > "$texte"; then
+  echo "commit-msg : lecture du message impossible : commit refusé" >&2
+  exit 1
+fi
+raisons=$(garde_examine "$motifs" < "$texte") || [ -n "$raisons" ] || raisons="examen impossible"
 if [ -n "$raisons" ]; then
   printf '%s\n' "$raisons" | sed 's/^/commit-msg : /' >&2
   echo "Commit refusé : corrige le message." >&2

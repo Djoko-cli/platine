@@ -1,10 +1,16 @@
 #!/bin/bash
-# Refuse le commit si les lignes ajoutées contiennent une fuite (voir garde-commun.sh).
-set -u
-. "$(git rev-parse --show-toplevel)/.githooks/garde-commun.sh"
-motifs=$(mktemp); trap 'rm -f "$motifs"' EXIT
+# Refuse le commit si les noms des fichiers ou les lignes ajoutées (binaires et
+# changements de type compris) contiennent une fuite (voir garde-commun.sh).
+set -u -o pipefail
+. "$(dirname "$0")/garde-commun.sh" || exit 1   # les fonctions du même garde que ce crochet
+garde_debut pre-commit
 garde_motifs pre-commit "$motifs" || exit 1
-raisons=$(git diff --cached -U0 --no-color --diff-filter=ACMR | grep -E '^\+' | grep -vE '^\+\+\+ ' | garde_examine "$motifs")
+if ! { git diff --cached -z --name-only --diff-filter=ACMRT | tr '\000' '\n' &&
+       git diff --cached -U0 --text --no-color --no-ext-diff --no-textconv --diff-filter=ACMRT | tr -d '\000' | garde_ajouts; } > "$texte"; then
+  echo "pre-commit : lecture de l'index impossible : commit refusé" >&2
+  exit 1
+fi
+raisons=$(garde_examine "$motifs" < "$texte") || [ -n "$raisons" ] || raisons="examen impossible"
 if [ -n "$raisons" ]; then
   printf '%s\n' "$raisons" | sed 's/^/pre-commit : /' >&2
   echo "Commit refusé. Relis le diff : git diff --cached" >&2

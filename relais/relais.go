@@ -94,15 +94,7 @@ func (r *Relais) Tourner(ctx context.Context) {
 		case <-r.changements:
 			attendre()
 		case j := <-r.jetonsRecus:
-			switch j.genre {
-			case JetonSession:
-				r.decideur.JetonSession()
-			case JetonDemarrage:
-				r.sansJetonSignale = false
-			}
-			// Un jeton nouveau peut débloquer une push (démarrage sans jeton jusqu'ici, update en attente du jeton de
-			// session, session démarrée par l'app).
-			if j.nouveau {
+			if r.prendreJeton(j) {
 				attendre()
 			}
 		case <-regroupe.C:
@@ -122,6 +114,23 @@ func (r *Relais) Tourner(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// prendreJeton : un jeton reçu par RecevoirJeton, côté boucle. Renvoie vrai quand il faut relire OwnTone : un jeton
+// nouveau peut débloquer une push (démarrage sans jeton jusqu'ici, update en attente du jeton de session, session
+// démarrée par l'app).
+func (r *Relais) prendreJeton(j jetonRecu) bool {
+	switch j.genre {
+	case JetonSession:
+		// Le jeton a pu être oublié pendant son attente dans le canal (end envoyé, jeton refusé). Rouvrir la session
+		// sans jeton la laisserait sans update ni end possibles, et bloquerait le prochain start.
+		if r.jetons.Session(idSession) != "" {
+			r.decideur.JetonSession()
+		}
+	case JetonDemarrage:
+		r.sansJetonSignale = false
+	}
+	return j.nouveau
 }
 
 func (r *Relais) observer(ctx context.Context) {
@@ -202,12 +211,12 @@ func (r *Relais) envoyer(ctx context.Context, p Push) {
 			return
 		}
 		if invalide {
-			r.oublier(r.jetons.OublierDemarrage())
+			r.oublier(r.jetons.OublierDemarrage(jeton))
 		}
 		r.decideur.SessionPerdue()
 	case MettreAJour:
 		if invalide {
-			r.oublier(r.jetons.OublierSession(idSession))
+			r.oublier(r.jetons.OublierSession(idSession, jeton))
 			r.decideur.SessionPerdue()
 		} else if passager {
 			r.decideur.ARenvoyer()
@@ -215,7 +224,7 @@ func (r *Relais) envoyer(ctx context.Context, p Push) {
 	case Terminer:
 		// Envoyé, ou refusé pour de bon : la session est finie pour le relais. Sinon, le décideur réessaie dans 30 s.
 		if !passager {
-			r.oublier(r.jetons.OublierSession(idSession))
+			r.oublier(r.jetons.OublierSession(idSession, jeton))
 			r.decideur.SessionPerdue()
 		}
 	}

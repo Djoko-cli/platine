@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sync"
 )
 
@@ -23,20 +24,23 @@ var formatJeton = regexp.MustCompile(`^[0-9a-f]{16,200}$`)
 // ainsi de suite).
 var ErrJetonTermine = errors.New("jeton d'une session terminée")
 
+// Les jetons de sessions finies gardés dans le fichier, pour survivre à un redémarrage : les plus récents suffisent.
+const maxTermines = 20
+
 type Jetons struct {
-	mu       sync.Mutex
-	fichier  string
-	contenu  contenuJetons
-	termines map[string]bool // en mémoire seulement
+	mu      sync.Mutex
+	fichier string
+	contenu contenuJetons
 }
 
 type contenuJetons struct {
 	Demarrage string            `json:"demarrage,omitempty"`
 	Sessions  map[string]string `json:"sessions"`
+	Termines  []string          `json:"termines,omitempty"` // voir ErrJetonTermine
 }
 
 func OuvrirJetons(fichier string) (*Jetons, error) {
-	j := &Jetons{fichier: fichier, contenu: contenuJetons{Sessions: map[string]string{}}, termines: map[string]bool{}}
+	j := &Jetons{fichier: fichier, contenu: contenuJetons{Sessions: map[string]string{}}}
 	data, err := os.ReadFile(fichier)
 	if errors.Is(err, os.ErrNotExist) {
 		return j, nil
@@ -76,7 +80,7 @@ func (j *Jetons) Enregistrer(genre, session, jeton string) (nouveau bool, err er
 		}
 		j.contenu.Demarrage = jeton
 	case JetonSession:
-		if j.termines[jeton] {
+		if slices.Contains(j.contenu.Termines, jeton) {
 			return false, ErrJetonTermine
 		}
 		if j.contenu.Sessions[session] == jeton {
@@ -89,23 +93,31 @@ func (j *Jetons) Enregistrer(genre, session, jeton string) (nouveau bool, err er
 	return true, j.sauver()
 }
 
-func (j *Jetons) OublierDemarrage() error {
+// OublierDemarrage : ce jeton de démarrage a été refusé par APNs. Un jeton plus récent, arrivé pendant l'envoi, reste.
+func (j *Jetons) OublierDemarrage(jeton string) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.contenu.Demarrage != jeton {
+		return nil
+	}
 	j.contenu.Demarrage = ""
 	return j.sauver()
 }
 
-// OublierSession : la session est finie pour le relais ; son jeton ne sera plus repris (voir ErrJetonTermine).
-func (j *Jetons) OublierSession(id string) error {
+// OublierSession : la session de ce jeton est finie pour le relais (end envoyé, ou jeton refusé) ; le jeton ne sera
+// plus repris (voir ErrJetonTermine). Un jeton plus récent, arrivé pendant l'envoi pour la même session, reste.
+func (j *Jetons) OublierSession(id, jeton string) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	jeton, ok := j.contenu.Sessions[id]
-	if !ok {
-		return nil
+	if !slices.Contains(j.contenu.Termines, jeton) {
+		j.contenu.Termines = append(j.contenu.Termines, jeton)
+		if n := len(j.contenu.Termines); n > maxTermines {
+			j.contenu.Termines = slices.Clone(j.contenu.Termines[n-maxTermines:])
+		}
 	}
-	j.termines[jeton] = true
-	delete(j.contenu.Sessions, id)
+	if j.contenu.Sessions[id] == jeton {
+		delete(j.contenu.Sessions, id)
+	}
 	return j.sauver()
 }
 

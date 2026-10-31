@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"log/slog"
 	"math/big"
@@ -172,9 +173,48 @@ func TestJetonsGardesEtRecus(t *testing.T) {
 		t.Error("jeton perdu au redémarrage")
 	}
 
-	// Après end, le même jeton redonné par l'extension ne rouvre pas la session.
-	j.OublierSession(idSession)
+	// Après end, le même jeton redonné par l'extension ne rouvre pas la session, même après un redémarrage.
+	j.OublierSession(idSession, jetonEssai)
 	if _, err := j.Enregistrer(JetonSession, idSession, jetonEssai); err != ErrJetonTermine {
 		t.Errorf("jeton d'une session terminée : %v", err)
+	}
+	relu, _ = OuvrirJetons(fichier)
+	if _, err := relu.Enregistrer(JetonSession, idSession, jetonEssai); err != ErrJetonTermine {
+		t.Errorf("jeton d'une session terminée, après un redémarrage : %v", err)
+	}
+}
+
+func TestOublierGardeLeJetonPlusRecent(t *testing.T) {
+	j, _ := OuvrirJetons(filepath.Join(t.TempDir(), "jetons.json"))
+	ancien, recent := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	j.Enregistrer(JetonSession, idSession, ancien)
+	j.Enregistrer(JetonSession, idSession, recent) // arrivé pendant l'envoi qui a fini l'ancienne session
+	j.OublierSession(idSession, ancien)
+	if j.Session(idSession) != recent {
+		t.Error("le jeton de la nouvelle session a été effacé avec l'ancien")
+	}
+	j.Enregistrer(JetonDemarrage, "", recent)
+	j.OublierDemarrage(ancien)
+	if j.Demarrage() != recent {
+		t.Error("jeton de démarrage plus récent effacé")
+	}
+	// La liste des jetons finis reste bornée.
+	for i := range 2 * maxTermines {
+		j.OublierSession(idSession, fmt.Sprintf("%064x", i))
+	}
+	if n := len(j.contenu.Termines); n != maxTermines {
+		t.Errorf("%d jetons finis gardés, attendu %d", n, maxTermines)
+	}
+}
+
+func TestJetonOublieEnAttenteNeRouvrePas(t *testing.T) {
+	j, _ := OuvrirJetons(filepath.Join(t.TempDir(), "jetons.json"))
+	r := NouveauRelais(nil, nil, j, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// Le jeton est arrivé, puis a été oublié (end envoyé) avant que la boucle lise son message.
+	j.Enregistrer(JetonSession, idSession, jetonEssai)
+	j.OublierSession(idSession, jetonEssai)
+	r.prendreJeton(jetonRecu{genre: JetonSession, nouveau: false})
+	if r.decideur.Ouverte() {
+		t.Error("session rouverte sans jeton : le prochain start serait bloqué")
 	}
 }

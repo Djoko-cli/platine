@@ -33,10 +33,29 @@ struct PlatineAttributs: RemoteMediaSessionAttributes, Equatable {
 
 struct ClientOwnTone: Sendable {
     let serveur: URL
+    /// Le jeton du portier, quand on passe par lui. Il n'est envoyé qu'à ce serveur, jamais à un autre hôte.
+    let jeton: String?
 
-    init?(adresse: String) {
+    init?(adresse: String, jeton: String? = nil) {
         guard let url = URL(string: adresse.trimmingCharacters(in: .whitespaces)), url.host != nil else { return nil }
         serveur = url
+        self.jeton = jeton
+    }
+
+    private func demande(_ url: URL) -> URLRequest {
+        var demande = URLRequest(url: url)
+        if let jeton, url.host == serveur.host {
+            demande.setValue("Bearer \(jeton)", forHTTPHeaderField: "Authorization")
+        }
+        return demande
+    }
+
+    private static func verifier(_ reponse: URLResponse) throws {
+        switch (reponse as? HTTPURLResponse)?.statusCode ?? 0 {
+        case 200..<300: return
+        case 401: throw URLError(.userAuthenticationRequired)
+        default: throw URLError(.badServerResponse)
+        }
     }
 
     private struct Lecteur: Decodable {
@@ -69,7 +88,8 @@ struct ClientOwnTone: Sendable {
     }
 
     private func lire<T: Decodable>(_ chemin: String, comme type: T.Type) async throws -> T {
-        let (data, _) = try await URLSession.shared.data(from: serveur.appending(path: chemin))
+        let (data, reponse) = try await URLSession.shared.data(for: demande(serveur.appending(path: chemin)))
+        try Self.verifier(reponse)
         return try JSONDecoder().decode(type, from: data)
     }
 
@@ -97,15 +117,14 @@ struct ClientOwnTone: Sendable {
     }
 
     private func envoyer(_ chemin: String, requete: [URLQueryItem] = [], corps: [String: Int]? = nil) async throws {
-        var demande = URLRequest(url: serveur.appending(path: chemin).appending(queryItems: requete))
+        var demande = demande(serveur.appending(path: chemin).appending(queryItems: requete))
         demande.httpMethod = "PUT"
         if let corps {
             demande.setValue("application/json", forHTTPHeaderField: "Content-Type")
             demande.httpBody = try JSONEncoder().encode(corps)
         }
         let (_, reponse) = try await URLSession.shared.data(for: demande)
-        let code = (reponse as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(code) else { throw URLError(.badServerResponse) }
+        try Self.verifier(reponse)
     }
 
     func lecture() async throws { try await envoyer("api/player/play") }
@@ -126,7 +145,7 @@ struct ClientOwnTone: Sendable {
         if url.host == serveur.host {
             url.append(queryItems: [URLQueryItem(name: "maxwidth", value: "600"), URLQueryItem(name: "maxheight", value: "600")])
         }
-        let (data, reponse) = try await URLSession.shared.data(from: url)
+        let (data, reponse) = try await URLSession.shared.data(for: demande(url))
         guard (reponse as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.fileDoesNotExist) }
         return data
     }

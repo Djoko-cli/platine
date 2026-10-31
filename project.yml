@@ -66,19 +66,11 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         EXAppExtensionAttributes:
           EXExtensionPointIdentifier: com.apple.nowplaying.remote-media
-        NSLocalNetworkUsageDescription: "Platine transmet tes commandes à OwnTone sur le réseau de la maison."
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-          # OwnTone par son nom Tailscale, en HTTP dans le tunnel chiffré de Tailscale.
-          NSExceptionDomains:
-            ts.net:
-              NSIncludesSubdomains: true
-              NSExceptionAllowsInsecureHTTPLoads: true
-        # Adresse d'OwnTone par Tailscale, réglée dans Config/Local.xcconfig (non versionné). Quand elle est réglée,
-        # l'extension l'utilise pour les commandes, le volume et la pochette : iOS lui refuse le réseau local.
-        PlatineSondeTailscale: $(OWNTONE_URL_TAILSCALE)
-        # Adresse publique de la maison pour la sonde réseau (essai témoin), réglée dans Config/Local.xcconfig.
-        PlatineSondePublique: $(PLATINE_SONDE_PUBLIQUE)
+        # Le portier (portier/) joint par le nom public de la maison : iOS refuse le réseau local à l'extension, mais
+        # laisse passer une adresse publique, que la box renvoie au NAS. Adresse et jeton réglés dans
+        # Config/Local.xcconfig (non versionné) ; le jeton finit dans le paquet de l'app, installée par Xcode.
+        PlatinePortier: $(PLATINE_PORTIER)
+        PlatineJeton: $(PLATINE_JETON)
     entitlements:
       path: PlatineSession/PlatineSession.entitlements
       properties:

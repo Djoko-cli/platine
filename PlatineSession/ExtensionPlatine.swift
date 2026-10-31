@@ -12,37 +12,8 @@ struct ExtensionPlatine: RemoteMediaSessionExtension {
     }
 
     func session(_ attributs: PlatineAttributs) async throws -> SessionPlatine {
-        JournalPartage.noter("session demandée : \(attributs.etat), piste \(attributs.pisteID), \(attributs.appareils.count) appareil(s)")
-        // Attendue avant de rendre la carte : iOS endort l'extension peu après, et une sonde laissée en route est perdue.
-        await Self.sonderReseau(serveur: attributs.serveur)
+        JournalPartage.noter("session demandée : \(attributs.etat), piste \(attributs.pisteID), \(attributs.appareils.count) appareil(s), \(SessionPlatine.portier == nil ? "OwnTone en direct" : "par le portier")")
         return SessionPlatine(attributs: attributs)
-    }
-
-    /// Essai témoin : quels chemins réseau l'extension a-t-elle le droit d'emprunter ? Toutes les sondes partent en
-    /// même temps, 4 s au plus.
-    private static func sonderReseau(serveur: String) async {
-        var cibles: [(String, String)] = []
-        if let publique = Bundle.main.object(forInfoDictionaryKey: "PlatineSondePublique") as? String, !publique.isEmpty {
-            // Port fermé exprès : seule compte la nature de l'erreur (refus d'iOS ou absence de réponse).
-            cibles.append(("adresse publique", publique + "/"))
-        }
-        cibles += [("Internet", "https://www.apple.com/library/test/success.html"), ("réseau local", serveur + "/api/config")]
-        if let tailscale = Bundle.main.object(forInfoDictionaryKey: "PlatineSondeTailscale") as? String, !tailscale.isEmpty {
-            cibles.append(("Tailscale", tailscale + "/api/config"))
-        }
-        await withTaskGroup(of: Void.self) { groupe in
-            for (nom, adresse) in cibles {
-                guard let url = URL(string: adresse) else { continue }
-                groupe.addTask {
-                    do {
-                        let (_, reponse) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 4))
-                        JournalPartage.noter("sonde \(nom) : HTTP \((reponse as? HTTPURLResponse)?.statusCode ?? 0)")
-                    } catch {
-                        JournalPartage.noter("sonde \(nom) : \(JournalPartage.resumer(error))")
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -61,20 +32,32 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
         self.attributs = attributs
     }
 
-    /// L'adresse Tailscale d'OwnTone quand elle est réglée (iOS refuse le réseau local à l'extension), sinon celle
-    /// que l'app a transmise.
-    private static let adresseTailscale = (Bundle.main.object(forInfoDictionaryKey: "PlatineSondeTailscale") as? String)
-        .flatMap { $0.isEmpty ? nil : $0 }
+    /// Le portier et son jeton (Info.plist, depuis Config/Local.xcconfig). iOS refuse le réseau local à l'extension :
+    /// sans portier, elle ne joint OwnTone qu'hors de la maison, par un tunnel.
+    static let portier = reglage("PlatinePortier")
+    private static let jeton = reglage("PlatineJeton")
 
-    private var client: ClientOwnTone? { ClientOwnTone(adresse: Self.adresseTailscale ?? attributs.serveur) }
+    private static func reglage(_ cle: String) -> String? {
+        (Bundle.main.object(forInfoDictionaryKey: cle) as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
 
-    /// La pochette donnée par OwnTone pointe vers son adresse locale : on la fait passer par la même adresse que les
-    /// commandes.
+    private var client: ClientOwnTone? {
+        if let portier = Self.portier { return ClientOwnTone(adresse: portier, jeton: Self.jeton) }
+        return ClientOwnTone(adresse: attributs.serveur)
+    }
+
+    /// La pochette servie par OwnTone pointe vers son adresse locale : on la fait passer par le portier. Une pochette
+    /// hébergée ailleurs reste telle quelle (et ne reçoit pas le jeton).
     private var adressePochette: String {
-        guard let tailscale = Self.adresseTailscale, attributs.pochette.hasPrefix(attributs.serveur) else {
+        guard let portier = Self.portier.flatMap({ URLComponents(string: $0) }),
+              var pochette = URLComponents(string: attributs.pochette),
+              pochette.host == URL(string: attributs.serveur)?.host else {
             return attributs.pochette
         }
-        return tailscale + attributs.pochette.dropFirst(attributs.serveur.count)
+        pochette.scheme = portier.scheme
+        pochette.host = portier.host
+        pochette.port = portier.port
+        return pochette.string ?? attributs.pochette
     }
 
     var content: (any MediaContentRepresentable)? {

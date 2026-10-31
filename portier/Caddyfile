@@ -4,7 +4,8 @@
 # de DSM, qui porte le HTTPS → ce portier, en HTTP sur 127.0.0.1 → OwnTone (127.0.0.1:3689).
 #
 # Il exige le jeton de Platine (PLATINE_JETON, dans .env, jamais versionné), ne laisse passer que la lecture de l'état,
-# les commandes du lecteur, le volume des sorties et les pochettes, et retire le jeton avant de transmettre.
+# les commandes du lecteur, le volume des sorties et les pochettes, et retire le jeton avant de transmettre. Il passe aussi
+# au relais des push (relais/, 127.0.0.1:18090) les jetons push donnés par l'iPhone.
 # Tout le reste de l'API d'OwnTone répond 404.
 {
 	admin off
@@ -25,6 +26,16 @@ http://:18089 {
 	@sans_jeton not header Authorization "Bearer {$PLATINE_JETON}"
 	handle @sans_jeton {
 		respond 401
+	}
+
+	@jetons {
+		method POST
+		path /platine/jetons
+	}
+	handle @jetons {
+		reverse_proxy 127.0.0.1:18090 {
+			header_up -Authorization
+		}
 	}
 
 	@autorise expression <<CEL

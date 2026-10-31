@@ -50,17 +50,22 @@ final class Relais {
         } catch {
             noter("lecture des sessions impossible : \(error)")
         }
-        if let jeton = RemoteMediaSession<PlatineAttributs>.pushToStartToken {
-            JetonsPush.enregistrerDemarrage(jeton)
-            noter("jeton de démarrage par push : présent (…\(JetonsPush.hexadecimal(jeton).suffix(4)))")
-        } else {
+        // Le flux des nouveaux jetons est pris avant le premier envoi : un jeton changé pendant cet envoi n'est pas perdu.
+        let present = RemoteMediaSession<PlatineAttributs>.pushToStartToken
+        let nouveaux = RemoteMediaSession<PlatineAttributs>.pushToStartTokenUpdates
+        if present == nil {
             noter("jeton de démarrage par push : absent pour l'instant")
         }
         suiviJeton?.cancel()
         suiviJeton = Task { [weak self] in
-            for await jeton in RemoteMediaSession<PlatineAttributs>.pushToStartTokenUpdates {
-                JetonsPush.enregistrerDemarrage(jeton)
-                self?.noter("nouveau jeton de démarrage par push (…\(JetonsPush.hexadecimal(jeton).suffix(4)))")
+            // Redonné au relais à chaque lancement : un envoi raté la fois d'avant se rattrape.
+            if let jeton = present {
+                let envoi = await JetonsPush.donnerDemarrage(jeton)
+                self?.noter("jeton de démarrage par push : présent (…\(JetonsPush.hexadecimal(jeton).suffix(4))), \(envoi)")
+            }
+            for await jeton in nouveaux {
+                let envoi = await JetonsPush.donnerDemarrage(jeton)
+                self?.noter("nouveau jeton de démarrage par push (…\(JetonsPush.hexadecimal(jeton).suffix(4))), \(envoi)")
             }
         }
     }

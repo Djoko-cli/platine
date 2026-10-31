@@ -32,17 +32,21 @@ final class SessionPlatine: RemoteMediaSessionRepresentable {
         suivreJetonPush()
     }
 
-    /// Le jeton de mise à jour de cette session, rangé pour le relais (pendant l'essai : lu par le Mac).
+    /// Le jeton de mise à jour de cette session, donné au relais. Redonné à chaque réveil de l'extension : le relais
+    /// ignore un jeton qu'il connaît déjà.
     private func suivreJetonPush() {
-        if let jeton = pushToken {
-            JetonsPush.enregistrerSession(id, jeton: jeton)
-            JournalPartage.noter("jeton de session : présent (…\(JetonsPush.hexadecimal(jeton).suffix(4)))")
-        }
-        Task { [weak self] in
-            guard let self else { return }
-            for await jeton in self.pushTokenUpdates {
-                JetonsPush.enregistrerSession(self.id, jeton: jeton)
-                JournalPartage.noter("nouveau jeton de session (…\(JetonsPush.hexadecimal(jeton).suffix(4)))")
+        let id = id
+        let present = pushToken
+        // Pris avant le premier envoi (un jeton changé pendant cet envoi n'est pas perdu), et sans retenir la session.
+        let nouveaux = pushTokenUpdates
+        Task {
+            if let jeton = present {
+                let envoi = await JetonsPush.donnerSession(id, jeton: jeton)
+                JournalPartage.noter("jeton de session : présent (…\(JetonsPush.hexadecimal(jeton).suffix(4))), \(envoi)")
+            }
+            for await jeton in nouveaux {
+                let envoi = await JetonsPush.donnerSession(id, jeton: jeton)
+                JournalPartage.noter("nouveau jeton de session (…\(JetonsPush.hexadecimal(jeton).suffix(4))), \(envoi)")
             }
         }
     }

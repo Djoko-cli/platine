@@ -140,6 +140,16 @@ struct ClientOwnTone: Sendable {
         try Self.verifier(reponse)
     }
 
+    /// Un jeton push pour le relais du NAS (route /platine/jetons du portier).
+    func donnerJeton(type: String, session: String, jeton: String) async throws {
+        var demande = demande(serveur.appending(path: "platine/jetons"))
+        demande.httpMethod = "POST"
+        demande.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        demande.httpBody = try JSONEncoder().encode(["type": type, "session": session, "jeton": jeton])
+        let (_, reponse) = try await URLSession.shared.data(for: demande)
+        try Self.verifier(reponse)
+    }
+
     func lecture() async throws { try await envoyer("api/player/play") }
     func pause() async throws { try await envoyer("api/player/pause") }
     func suivant() async throws { try await envoyer("api/player/next") }

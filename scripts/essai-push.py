@@ -2,6 +2,7 @@
 """Essai témoin des push nowplaying de Platine, depuis le Mac (étape 0 de la spec des push).
 
 Usage : /usr/bin/python3 -I scripts/essai-push.py recuperer         lit les jetons push dans le conteneur partagé de l'iPhone
+                                                                    (aussi pour relais/banc.sh jetons)
         /usr/bin/python3 -I scripts/essai-push.py journal           affiche le journal de l'extension
         /usr/bin/python3 -I scripts/essai-push.py start|update|end  envoie une push avec l'état réel d'OwnTone (portier)
 
@@ -68,7 +69,18 @@ def journal():
 
 def recuperer():
     os.makedirs(DOSSIER, mode=0o700, exist_ok=True)
-    contenu = json.loads(copier_depuis_iphone("jetons-push.json"))
+    # Un fichier par processus : le jeton de démarrage vient de l'app, ceux des sessions de l'extension.
+    contenu = {"demarrage": None, "sessions": {}}
+    lus = 0
+    for nom, lire in (("jetons-demarrage.json", lambda c: contenu.update(demarrage=c.get("demarrage"))),
+                      ("jetons-session.json", lambda c: contenu["sessions"].update(c))):
+        try:
+            lire(json.loads(copier_depuis_iphone(nom)))
+            lus += 1
+        except SystemExit as absent:
+            print(f"{nom} : {absent}")
+    if not lus:
+        sys.exit("aucun fichier de jetons lu : " + JETONS + " reste tel quel")
     descripteur = os.open(JETONS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descripteur, "w") as f:
         json.dump(contenu, f)

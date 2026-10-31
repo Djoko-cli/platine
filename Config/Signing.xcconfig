@@ -1,0 +1,7 @@
+// Signature de l'app. L'équipe de développement et l'adresse d'OwnTone sont propres à chaque installation :
+// elles se règlent dans Local.xcconfig, à côté de ce fichier, non versionné.
+// Contenu attendu de Local.xcconfig :
+//   DEVELOPMENT_TEAM = <identifiant de l'équipe>
+//   OWNTONE_URL = http:/$()/<adresse d'OwnTone>:3689
+CODE_SIGN_STYLE = Automatic
+#include? "Local.xcconfig"

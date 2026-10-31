@@ -1,0 +1,30 @@
+#!/bin/bash
+# Refuse le push si un commit poussé a un auteur ou un committer hors noreply,
+# si ses ajouts ou son message contiennent une fuite (voir garde-commun.sh),
+# ou si un fichier suivi de la tête poussée contient une valeur de la liste locale.
+set -u
+. "$(git rev-parse --show-toplevel)/.githooks/garde-commun.sh"
+zero=0000000000000000000000000000000000000000
+motifs=$(mktemp); trap 'rm -f "$motifs"' EXIT
+garde_motifs pre-push "$motifs" || exit 1
+fautifs=0
+signale() { echo "pre-push : $1" >&2; fautifs=$((fautifs + 1)); }
+while read -r ref_locale sha_local ref_distante sha_distant; do
+  [ "$sha_local" = "$zero" ] && continue   # suppression d'une branche
+  if [ "$sha_distant" = "$zero" ] || ! git cat-file -e "$sha_distant" 2>/dev/null; then
+    plage=$(git rev-list "$sha_local" --not --remotes)
+  else
+    plage=$(git rev-list "$sha_distant..$sha_local")
+  fi
+  for c in $plage; do
+    court=$(git log -1 --format=%h "$c")
+    ae=$(git log -1 --format=%ae "$c"); ce=$(git log -1 --format=%ce "$c")
+    { [ "$ae" = "$garde_attendu" ] && [ "$ce" = "$garde_attendu" ]; } || signale "commit $court : auteur ou committer hors noreply"
+    raisons=$( { git diff-tree -p -r --root --no-commit-id --no-color "$c" | grep -E '^\+' | grep -vE '^\+\+\+ '; git log -1 --format=%B "$c"; } | garde_examine "$motifs")
+    while IFS= read -r r; do [ -n "$r" ] && signale "commit $court : $r"; done <<< "$raisons"
+  done
+  if git grep -qiIF -f "$motifs" "$sha_local" -- . 2>/dev/null; then
+    signale "un fichier suivi de $ref_locale contient un identifiant réel de la liste locale"
+  fi
+done
+[ "$fautifs" -eq 0 ] || { echo "pre-push : push refusé ($fautifs problème(s))." >&2; exit 1; }

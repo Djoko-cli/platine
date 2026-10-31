@@ -1,0 +1,12 @@
+#!/bin/bash
+# Refuse le commit si les lignes ajoutées contiennent une fuite (voir garde-commun.sh).
+set -u
+. "$(git rev-parse --show-toplevel)/.githooks/garde-commun.sh"
+motifs=$(mktemp); trap 'rm -f "$motifs"' EXIT
+garde_motifs pre-commit "$motifs" || exit 1
+raisons=$(git diff --cached -U0 --no-color --diff-filter=ACMR | grep -E '^\+' | grep -vE '^\+\+\+ ' | garde_examine "$motifs")
+if [ -n "$raisons" ]; then
+  printf '%s\n' "$raisons" | sed 's/^/pre-commit : /' >&2
+  echo "Commit refusé. Relis le diff : git diff --cached" >&2
+  exit 1
+fi

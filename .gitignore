@@ -1,0 +1,21 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Projet et Info.plist générés par xcodegen
+Platine.xcodeproj/
+Platine/Info.plist
+PlatineSession/Info.plist
+
+# Réglages locaux : équipe de signature, adresse d'OwnTone, clés
+Config/Local.xcconfig
+garde.local.txt
+*.p8
+
+# Dossiers de travail
+.superpowers/
+.archify/
+build-essai.log

@@ -1,0 +1,12 @@
+#!/bin/bash
+# Refuse un message de commit qui contient une fuite (voir garde-commun.sh).
+set -u
+. "$(git rev-parse --show-toplevel)/.githooks/garde-commun.sh"
+motifs=$(mktemp); trap 'rm -f "$motifs"' EXIT
+garde_motifs commit-msg "$motifs" || exit 1
+raisons=$(grep -v '^#' "$1" | garde_examine "$motifs")
+if [ -n "$raisons" ]; then
+  printf '%s\n' "$raisons" | sed 's/^/commit-msg : /' >&2
+  echo "Commit refusé : corrige le message." >&2
+  exit 1
+fi

@@ -1,6 +1,6 @@
 # Spec : la carte Platine tenue à jour par des push
 
-Date : 31/10/2026. Statut : à valider par Djoko.
+Date : 31/10/2026. Statut : validée par Djoko ; relais construit (`relais/`) et passé au banc le 31/10/2026.
 
 ## Le besoin
 
@@ -111,13 +111,52 @@ Push envoyées à la main depuis le Mac (`scripts/essai-push.py`), journal syst�
 - **Confirmé dans le journal :** `mediaremoted` applique une « Network restriction » à l'extension (d'où le refus du
   réseau local) ; il range la session distante sous un HomePod.
 
-## Les décisions à prendre
+## Résultats du banc du relais (31/10/2026)
+
+Chaîne complète : app et extension → portier → relais sur le NAS → APNs (développement) → extension. Journaux lus
+depuis le Mac : relais (`donnees/relais.log` par ssh), extension (`scripts/essai-push.py journal`), système de l'iPhone
+(`idevicesyslog`). Le relais occupe environ 3,5 Mo de mémoire.
+
+- **start : marche.** À l'ouverture de l'app pendant une lecture (le jeton de démarrage arrive, la carte part aussitôt),
+  et **app fermée, par un bouton de l'app Maison** : la carte apparaît d'elle-même environ 1 s après le début de la
+  lecture. Le tout premier envoi à APNs a pris environ 6 s (première connexion du NAS) ; les suivants partent aussitôt.
+- **update : marche** pour tout ce qui change ailleurs que sur la carte : morceau suivant (fin naturelle ou interface
+  web d'OwnTone), titre et pochette compris ; volume réglé par Siri sur un HomePod (deux push : Siri règle par
+  paliers) ; saut dans le morceau ; pause puis lecture. Le curseur de volume de la carte, glissé puis lâché, reste en
+  place (quelques push espacées de 2 à 6 s pendant le geste, sans retour en arrière).
+- **end : marche.** Deux fois, 2 min après un arrêt (vérification toutes les 5 s) : la carte disparaît, il reste le
+  lecteur vide d'iOS (« À l'arrêt »). Des attributs réduits à l'identifiant de la session suffisent.
+- **Jeton de session :** un nouveau à chaque session, donné par l'extension 0,6 à 5 s après le start. L'extension est
+  appelée deux à quatre fois par session et le redonne à chaque fois ; le relais ignore les doublons, et le jeton d'une
+  session à qui il a envoyé end.
+- **Écran verrouillé : la règle constatée.** Une carte démarrée app fermée apparaît d'abord dans le Centre de contrôle ;
+  elle prend l'écran verrouillé dès que l'utilisateur la touche dans le Centre de contrôle. Démarrée app au premier
+  plan, elle le prend d'emblée. iOS donne donc l'écran verrouillé à une session distante après une interaction de
+  l'utilisateur, ou quand elle démarre app ouverte ; une fois prise, la place reste, app fermée.
+- **Extension périmée :** la première push après une réinstallation réveille l'ancienne extension, qui voit le nouveau
+  binaire et s'arrête ; la nouvelle prend la suite environ 4 s plus tard.
+- **Websocket d'OwnTone :** stable (pings toutes les 30 s acceptés, aucune coupure en plus d'une heure).
+- **Un arrêt inexpliqué** (file vide, aucune ligne dans le journal d'OwnTone ; un refus de connexion de Spotify a
+  précédé la relance) : le relais a fait ce qu'il fallait, carte à l'arrêt puis end 2 min plus tard.
+- **NAS :** docker répond sans sudo par `/usr/local/bin/docker` (absent du PATH d'une session ssh). Les ACL du dossier
+  partagé passent outre umask : les droits des secrets sont posés explicitement (`relais/deployer.sh`).
+
+## Questions ouvertes
+
+1. **Carte fermée depuis l'iPhone :** si l'utilisateur ferme la session sur l'iPhone, le relais l'ignore jusqu'au refus
+   d'APNs (jeton périmé), puis repart par start à la lecture suivante. Comportement réel à observer.
+2. **Priorité des push :** toutes partent en priorité 10 (immédiate). Une priorité 5 pour les update ménagerait la
+   batterie et le quota, au risque d'un retard d'affichage.
+3. **MediaRemote d'OwnTone :** l'écran verrouillé s'obtient sans le couper (règle ci-dessus). Le couper reste à décider,
+   selon que la tuile native du HomePod gêne ou non.
+
+## Les décisions (validées par Djoko le 31/10/2026)
 
 | # | Question | Proposition |
 |---|---|---|
 | 1 | Langage du relais | **Go** : un seul binaire, HTTP/2 et signature ES256 dans la bibliothèque standard, une dizaine de Mo de mémoire (le NAS est déjà chargé). Python serait plus court à lire, au prix de dépendances et de mémoire. |
 | 2 | Quand la carte disparaît | **Arrêt** (`stop`) : `end` après 2 minutes. **Pause** : la carte reste 30 minutes, puis `end`. |
-| 3 | Regroupement | 1 seconde, dernier état seulement. |
+| 3 | Regroupement | 1 seconde, dernier état seulement. Mis en œuvre comme une seconde de calme après le dernier événement, 5 s d'attente au plus. |
 | 4 | Environnement APNs | Développement tant que l'app passe par Xcode. Production le jour d'une diffusion par TestFlight. |
 | 5 | Ordre de travail | Étape 0 (essai témoin), puis relais, puis app et extension, puis route du portier, puis banc. |
 

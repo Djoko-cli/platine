@@ -1,5 +1,8 @@
 # Relais des push de Platine : plan d'exécution
 
+**Statut :** abandonné (31/10/2026). Le relais a été construit par une autre voie (dossier `relais/`, résultats du banc
+dans la spec) ; de ce plan, seul l'arrêt de l'extension périmée a été repris, corrigé. Ne pas exécuter.
+
 > **Pour les agents :** sous-skill requise : `superpowers:subagent-driven-development` (recommandé) ou
 > `superpowers:executing-plans`, tâche par tâche. Chaque étape est une case (`- [ ]`) : la cocher dès qu'elle est faite
 > et vérifiée, et la commiter avec le travail de la tâche.

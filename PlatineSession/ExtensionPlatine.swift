@@ -12,8 +12,11 @@ struct ExtensionPlatine: RemoteMediaSessionExtension {
     }
 
     func session(_ attributs: PlatineAttributs) async throws -> SessionPlatine {
-        JournalPartage.noter("session demandée : \(attributs.etat), piste \(attributs.pisteID), \(attributs.appareils.count) appareil(s), \(ClientOwnTone.adressePortier == nil ? "OwnTone en direct" : "par le portier")")
-        return SessionPlatine(attributs: attributs)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        JournalPartage.noter("session demandée (extension \(version)) : \(attributs.etat), piste \(attributs.pisteID), \(attributs.appareils.count) appareil(s), \(ClientOwnTone.adressePortier == nil ? "OwnTone en direct" : "par le portier")")
+        let session = SessionPlatine(attributs: attributs)
+        JournalPartage.noter("lignes de la carte : \(session.devices.map(\.name).joined(separator: ", "))")
+        return session
     }
 }
 

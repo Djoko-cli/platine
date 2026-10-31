@@ -100,8 +100,12 @@ Push envoyées à la main depuis le Mac (`scripts/essai-push.py`), journal syst�
   `mediaremoted` (« set active session »), mais le point de lecture proactif de l'écran verrouillé reste celui qu'iOS
   a retenu (« ProactiveSystemEndpoint remains … selectionReason = UserSelected ») ; toucher la carte ou faire
   lecture et pause n'y change rien. Une fois, sans aucune enceinte active, la demande a échoué (`internalFailure`).
-- **Hypothèse non tranchée :** la tuile native des HomePod (MediaRemote d'OwnTone) serait ce point retenu. À vérifier
-  en coupant MediaRemote dans OwnTone, avec des enceintes actives.
+- **Puis, vers 14 h 55, la carte Platine est apparue d'elle-même sur l'écran verrouillé**, en premier, complète
+  (lignes des enceintes, pochette, commandes, curseur de volume), la tuile native du HomePod mini en dessous. Le
+  déclencheur n'est pas établi : soit une pause puis une lecture faites depuis la carte vers 14 h 36 (choix de
+  l'utilisateur retenu par iOS), soit les mises à jour aux changements de morceau. À observer au banc du relais.
+- **Hypothèse à vérifier si la place se perd :** la tuile native des HomePod (MediaRemote d'OwnTone) concurrence la
+  carte ; essai possible en coupant MediaRemote dans OwnTone, avec des enceintes actives.
 - **Paire stéréo :** réunie en une seule ligne de la carte, elle s'affiche avec l'icône « deux enceintes » (type
   `speakerGroup`, iOS 27.2) ; aucun type ne donne l'icône d'un HomePod.
 - **Confirmé dans le journal :** `mediaremoted` applique une « Network restriction » à l'extension (d'où le refus du

@@ -150,8 +150,14 @@ depuis le Mac : relais (`donnees/relais.log` par ssh), extension (`scripts/essai
    rationne pas ; un refus pour excès (HTTP 429) paraîtrait dans le journal du relais (« push en échec »).
 3. **MediaRemote d'OwnTone :** l'écran verrouillé s'obtient sans le couper (règle ci-dessus). **Décision : le couper**
    (`mediaremote = false` dans la configuration d'OwnTone : seule la tuile native des HomePod disparaît ; leurs commandes
-   et le suivi du volume passent par AirPlay). Le relais n'a rien à changer. À observer ensuite : la carte prend-elle
-   l'écran verrouillé sans qu'on la touche ?
+   et le suivi du volume passent par AirPlay). Le relais n'a rien à changer. **Constaté ensuite** (relance app fermée,
+   iPhone verrouillé) : la carte n'a pas pris l'écran verrouillé d'elle-même ; touchée dans le Centre de contrôle, elle
+   est passée dans la Dynamic Island et sur l'écran verrouillé. La tuile native n'était donc pas ce qui bloquait :
+   iOS décide seul, et une interaction avec la carte suffit. Djoko accepte ce comportement. Sans MediaRemote, la tuile
+   native des HomePod a bien disparu, et le volume réglé par Siri est toujours suivi par la carte (OwnTone le signale
+   par AirPlay ; mises à jour du relais sur le même morceau). **MediaRemote reste coupé.**
+   Piste, si un jour cela gêne : chaque nouvelle session a demandé ce geste, alors qu'une session déjà promue garde sa
+   place. Une fin plus tardive après un arrêt garderait la même session d'une écoute à l'autre (hypothèse non vérifiée).
 
 ## Les décisions (validées par Djoko le 31/10/2026)
 

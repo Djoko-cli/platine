@@ -46,6 +46,6 @@ set -e
 app="build/Build/Products/Debug-iphoneos/Platine.app"
 echo "== installation sur l'iPhone"
 xcrun devicectl device install app --device "$appareil" "$app" 2>&1 | grep -E 'App installed|error|Error' | masquer
-# Pas de lancement depuis le Mac : une app lancée en mode développement échappe à la demande d'accès au réseau
-# local, dont l'extension dépend. On l'ouvre depuis son icône sur l'iPhone.
+# Pas de lancement depuis le Mac : on ouvre l'app depuis son icône sur l'iPhone. (Il le fallait pour la demande d'accès
+# au réseau local ; l'app n'en a plus besoin, elle passe par le portier.)
 echo "FIN : ouvrir Platine depuis son icône sur l'iPhone"

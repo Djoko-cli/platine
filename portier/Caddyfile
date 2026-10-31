@@ -1,0 +1,44 @@
+# Portier de Platine : la seule entrée publique vers OwnTone.
+#
+# Chemin d'une commande : extension de Platine → https://<nom public> → box (NAT loopback à la maison) → proxy inversé
+# de DSM, qui porte le HTTPS → ce portier, en HTTP sur 127.0.0.1 → OwnTone (127.0.0.1:3689).
+#
+# Il exige le jeton de Platine (PLATINE_JETON, dans .env, jamais versionné), ne laisse passer que la lecture de l'état,
+# les commandes du lecteur, le volume des sorties et les pochettes, et retire le jeton avant de transmettre.
+# Tout le reste de l'API d'OwnTone répond 404.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+http://:18089 {
+	bind 127.0.0.1
+
+	request_body {
+		max_size 1KB
+	}
+
+	# Journal d'accès sur la sortie standard ; Caddy y masque l'en-tête Authorization.
+	log
+
+	@sans_jeton not header Authorization "Bearer {$PLATINE_JETON}"
+	handle @sans_jeton {
+		respond 401
+	}
+
+	@autorise expression <<CEL
+		(method('GET') && path('/api/player', '/api/outputs', '/api/queue', '/artwork/item/*'))
+		|| (method('PUT') && path('/api/player/play', '/api/player/pause', '/api/player/next', '/api/player/previous', '/api/player/seek'))
+		|| (method('PUT') && path_regexp('^/api/outputs/[0-9]+$'))
+		CEL
+	handle @autorise {
+		reverse_proxy 127.0.0.1:3689 {
+			header_up -Authorization
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}

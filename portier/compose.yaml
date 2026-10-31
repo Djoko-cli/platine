@@ -1,0 +1,33 @@
+# Portier de Platine (voir Caddyfile). Sur le NAS : dossier du conteneur avec ce fichier, le Caddyfile et un .env
+# (droits 600, jamais versionné) qui contient PLATINE_JETON=<64 caractères hexadécimaux>.
+# Le proxy inversé de DSM transmet https://<nom public> à http://127.0.0.1:18089.
+services:
+  portier:
+    image: caddy:2.11.7-alpine
+    container_name: platine-portier
+    # Réseau de l'hôte : le portier n'écoute que sur 127.0.0.1 et joint OwnTone sur 127.0.0.1:3689.
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /data
+      - /config
+    cap_drop:
+      - ALL
+    # Le binaire de Caddy porte cette capacité : sans elle dans le jeu autorisé, Linux refuse de le lancer.
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    memswap_limit: 128m
+    environment:
+      # Sans jeton, le conteneur refuse de démarrer : un jeton vide laisserait passer « Bearer » seul.
+      PLATINE_JETON: ${PLATINE_JETON:?PLATINE_JETON manquant dans .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "3"
